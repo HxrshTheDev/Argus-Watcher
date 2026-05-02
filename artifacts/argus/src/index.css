@@ -73,106 +73,103 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 210 20% 98%;
-  --foreground: 222 47% 11%;
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 239 84% 67%;
-  
+  --background: 220 20% 97%;
+  --foreground: 224 71% 4%;
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 235 86% 65%;
+
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  --card-foreground: 224 71% 4%;
+  --card-border: 220 13% 91%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 224 71% 4%;
+  --popover-border: 220 13% 91%;
 
-  --primary: 239 84% 67%;
+  --primary: 235 86% 65%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 220 14% 96%;
+  --secondary-foreground: 224 71% 4%;
 
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
+  --muted: 220 14% 94%;
+  --muted-foreground: 220 9% 46%;
 
-  --accent: 210 40% 96%;
-  --accent-foreground: 222 47% 11%;
+  --accent: 220 14% 94%;
+  --accent-foreground: 224 71% 4%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
 
-  --sidebar: 210 20% 98%;
-  --sidebar-foreground: 222 47% 11%;
-  --sidebar-border: 214 32% 91%;
-  --sidebar-primary: 239 84% 67%;
+  --sidebar: 220 20% 98%;
+  --sidebar-foreground: 224 71% 4%;
+  --sidebar-border: 220 13% 91%;
+  --sidebar-primary: 235 86% 65%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 210 40% 96%;
-  --sidebar-accent-foreground: 222 47% 11%;
-  --sidebar-ring: 239 84% 67%;
+  --sidebar-accent: 220 14% 94%;
+  --sidebar-accent-foreground: 224 71% 4%;
+  --sidebar-ring: 235 86% 65%;
 
-  --chart-1: 239 84% 67%;
+  --chart-1: 235 86% 65%;
   --chart-2: 173 58% 39%;
   --chart-3: 197 37% 24%;
   --chart-4: 43 74% 66%;
   --chart-5: 27 87% 67%;
 
-  --app-font-sans: 'Inter', sans-serif;
+  --app-font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif;
   --app-font-serif: Georgia, serif;
-  --app-font-mono: Menlo, monospace;
-  --radius: 0.5rem;
+  --app-font-mono: 'SF Mono', Menlo, Consolas, monospace;
+  --radius: 0.75rem;
 }
 
 .dark {
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
   --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
+  --elevate-1: rgba(255,255,255, .03);
+  --elevate-2: rgba(255,255,255, .07);
 
-  /* Deep navy/slate background */
-  --background: 222 47% 7%;
+  --background: 224 71% 4%;
   --foreground: 210 40% 98%;
-  
-  /* Slightly lighter navy for cards */
-  --card: 222 47% 10%;
+
+  --card: 222 47% 7%;
   --card-foreground: 210 40% 98%;
-  --card-border: 217 33% 17%;
+  --card-border: 217 33% 14%;
 
-  --popover: 222 47% 10%;
+  --popover: 222 47% 7%;
   --popover-foreground: 210 40% 98%;
-  --popover-border: 217 33% 17%;
+  --popover-border: 217 33% 14%;
 
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
-  --ring: 239 84% 67%;
+  --border: 217 33% 14%;
+  --input: 217 33% 14%;
+  --ring: 235 86% 65%;
 
-  --primary: 239 84% 67%;
+  --primary: 235 86% 65%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 217 33% 17%;
+  --secondary: 217 33% 11%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20.2% 65.1%;
+  --muted: 217 33% 11%;
+  --muted-foreground: 215 20% 55%;
 
-  --accent: 217 33% 17%;
+  --accent: 217 33% 11%;
   --accent-foreground: 210 40% 98%;
 
-  --destructive: 0 62% 30%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
 
-  /* Dark navy sidebar */
-  --sidebar: 224 47% 5%;
+  --sidebar: 224 71% 3%;
   --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 17%;
-  --sidebar-primary: 239 84% 67%;
+  --sidebar-border: 217 33% 12%;
+  --sidebar-primary: 235 86% 65%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 217 33% 17%;
+  --sidebar-accent: 217 33% 11%;
   --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 239 84% 67%;
+  --sidebar-ring: 235 86% 65%;
 
-  --chart-1: 239 84% 67%;
+  --chart-1: 235 86% 65%;
   --chart-2: 160 60% 45%;
   --chart-3: 30 80% 55%;
   --chart-4: 280 65% 60%;
@@ -183,7 +180,43 @@
   * {
     @apply border-border;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  * {
+    transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+}
+
+@layer utilities {
+  .glass {
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+  .ios-card {
+    @apply rounded-2xl border border-border bg-card shadow-sm;
+  }
+  .animate-in {
+    animation-fill-mode: both;
   }
 }

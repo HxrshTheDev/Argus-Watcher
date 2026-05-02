@@ -8,6 +8,7 @@ export const researchNotesTable = pgTable("research_notes", {
   summary: text("summary").notNull(),
   insights: text("insights").notNull(),
   conclusion: text("conclusion"),
+  sources: text("sources"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
