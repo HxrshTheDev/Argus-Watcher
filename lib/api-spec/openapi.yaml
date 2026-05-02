@@ -3,13 +3,30 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Argus Personal AI Assistant API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: conversations
+    description: Chat conversations
+  - name: tasks
+    description: Task management
+  - name: research
+    description: Research notes and queries
+  - name: emails
+    description: Email drafts and summaries
+  - name: posts
+    description: Social media posts
+  - name: workflows
+    description: Workflow automation
+  - name: dashboard
+    description: Dashboard overview
+  - name: openai
+    description: OpenAI chat endpoints
+
 paths:
   /healthz:
     get:
@@ -24,6 +41,587 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Conversations ──────────────────────────────────────────────
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List conversations
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+    post:
+      operationId: createConversation
+      tags: [conversations]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationBody"
+      responses:
+        "201":
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+
+  /conversations/{id}:
+    get:
+      operationId: getConversation
+      tags: [conversations]
+      summary: Get a conversation with messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationWithMessages"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteConversation
+      tags: [conversations]
+      summary: Delete a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── OpenAI Chat (SSE streaming) ────────────────────────────────
+  /openai/conversations/{id}/messages:
+    post:
+      operationId: sendOpenaiMessage
+      tags: [openai]
+      summary: Send a message (SSE stream)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendOpenaiMessageBody"
+      responses:
+        "200":
+          description: SSE stream of content chunks
+
+  # ── Tasks ──────────────────────────────────────────────────────
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      summary: List tasks
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, completed, all]
+        - name: filter
+          in: query
+          schema:
+            type: string
+            enum: [today, upcoming, all]
+      responses:
+        "200":
+          description: List of tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      operationId: createTask
+      tags: [tasks]
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskBody"
+      responses:
+        "201":
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /tasks/stats:
+    get:
+      operationId: getTaskStats
+      tags: [tasks]
+      summary: Get task statistics
+      responses:
+        "200":
+          description: Task statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskStats"
+
+  /tasks/{id}:
+    get:
+      operationId: getTask
+      tags: [tasks]
+      summary: Get a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateTask
+      tags: [tasks]
+      summary: Update a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskBody"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+    delete:
+      operationId: deleteTask
+      tags: [tasks]
+      summary: Delete a task
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Research ───────────────────────────────────────────────────
+  /research:
+    get:
+      operationId: listResearchNotes
+      tags: [research]
+      summary: List research notes
+      responses:
+        "200":
+          description: List of research notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ResearchNote"
+    post:
+      operationId: createResearchNote
+      tags: [research]
+      summary: Save a research note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateResearchNoteBody"
+      responses:
+        "201":
+          description: Research note created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchNote"
+
+  /research/query:
+    post:
+      operationId: runResearchQuery
+      tags: [research]
+      summary: Run an AI research query
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResearchQueryBody"
+      responses:
+        "200":
+          description: Research result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchResult"
+
+  /research/{id}:
+    get:
+      operationId: getResearchNote
+      tags: [research]
+      summary: Get a research note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Research note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchNote"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteResearchNote
+      tags: [research]
+      summary: Delete a research note
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Email Drafts ───────────────────────────────────────────────
+  /emails:
+    get:
+      operationId: listEmailDrafts
+      tags: [emails]
+      summary: List email drafts
+      responses:
+        "200":
+          description: List of email drafts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmailDraft"
+    post:
+      operationId: createEmailDraft
+      tags: [emails]
+      summary: Save an email draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEmailDraftBody"
+      responses:
+        "201":
+          description: Email draft saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailDraft"
+
+  /emails/draft:
+    post:
+      operationId: generateEmailDraft
+      tags: [emails]
+      summary: AI-generate an email draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateEmailDraftBody"
+      responses:
+        "200":
+          description: Generated draft content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedEmail"
+
+  /emails/summarize:
+    post:
+      operationId: summarizeEmail
+      tags: [emails]
+      summary: AI-summarize email content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SummarizeEmailBody"
+      responses:
+        "200":
+          description: Summary result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmailSummary"
+
+  /emails/{id}:
+    delete:
+      operationId: deleteEmailDraft
+      tags: [emails]
+      summary: Delete an email draft
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Social Posts ───────────────────────────────────────────────
+  /posts:
+    get:
+      operationId: listPosts
+      tags: [posts]
+      summary: List saved social posts
+      responses:
+        "200":
+          description: List of posts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SocialPost"
+    post:
+      operationId: createPost
+      tags: [posts]
+      summary: Save a social post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePostBody"
+      responses:
+        "201":
+          description: Post saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SocialPost"
+
+  /posts/generate:
+    post:
+      operationId: generatePost
+      tags: [posts]
+      summary: AI-generate a social media post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GeneratePostBody"
+      responses:
+        "200":
+          description: Generated post content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedPost"
+
+  /posts/{id}:
+    delete:
+      operationId: deletePost
+      tags: [posts]
+      summary: Delete a post
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Workflows ──────────────────────────────────────────────────
+  /workflows:
+    get:
+      operationId: listWorkflows
+      tags: [workflows]
+      summary: List workflows
+      responses:
+        "200":
+          description: List of workflows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workflow"
+    post:
+      operationId: createWorkflow
+      tags: [workflows]
+      summary: Create a workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkflowBody"
+      responses:
+        "201":
+          description: Workflow created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workflow"
+
+  /workflows/{id}:
+    get:
+      operationId: getWorkflow
+      tags: [workflows]
+      summary: Get a workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workflow"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateWorkflow
+      tags: [workflows]
+      summary: Update a workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkflowBody"
+      responses:
+        "200":
+          description: Updated workflow
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workflow"
+    delete:
+      operationId: deleteWorkflow
+      tags: [workflows]
+      summary: Delete a workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /workflows/{id}/run:
+    post:
+      operationId: runWorkflow
+      tags: [workflows]
+      summary: Run a workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Workflow run result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRunResult"
+
+  # ── Dashboard ──────────────────────────────────────────────────
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get overall dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /activity:
+    get:
+      operationId: getActivityFeed
+      tags: [dashboard]
+      summary: Get recent activity feed
+      responses:
+        "200":
+          description: Activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +632,435 @@ components:
       required:
         - status
 
+    # ── Conversations ──────────────────────────────────────────
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        messageCount:
+          type: integer
+      required: [id, title, createdAt, updatedAt, messageCount]
+
+    ConversationWithMessages:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+      required: [id, title, createdAt, updatedAt, messages]
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        createdAt:
+          type: string
+      required: [id, conversationId, role, content, createdAt]
+
+    CreateConversationBody:
+      type: object
+      properties:
+        title:
+          type: string
+      required: [title]
+
+    SendOpenaiMessageBody:
+      type: object
+      properties:
+        content:
+          type: string
+        systemPrompt:
+          type: ["string", "null"]
+      required: [content]
+
+    # ── Tasks ──────────────────────────────────────────────────
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        completed:
+          type: boolean
+        priority:
+          type: string
+          enum: [low, medium, high]
+        dueDate:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, title, completed, priority, createdAt, updatedAt]
+
+    CreateTaskBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        priority:
+          type: string
+          enum: [low, medium, high]
+        dueDate:
+          type: ["string", "null"]
+      required: [title]
+
+    UpdateTaskBody:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        completed:
+          type: boolean
+        priority:
+          type: string
+          enum: [low, medium, high]
+        dueDate:
+          type: ["string", "null"]
+
+    TaskStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        completed:
+          type: integer
+        pending:
+          type: integer
+        dueToday:
+          type: integer
+        overdue:
+          type: integer
+        highPriority:
+          type: integer
+      required: [total, completed, pending, dueToday, overdue, highPriority]
+
+    # ── Research ───────────────────────────────────────────────
+    ResearchNote:
+      type: object
+      properties:
+        id:
+          type: integer
+        query:
+          type: string
+        summary:
+          type: string
+        insights:
+          type: string
+        conclusion:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, query, summary, insights, createdAt]
+
+    CreateResearchNoteBody:
+      type: object
+      properties:
+        query:
+          type: string
+        summary:
+          type: string
+        insights:
+          type: string
+        conclusion:
+          type: ["string", "null"]
+      required: [query, summary, insights]
+
+    ResearchQueryBody:
+      type: object
+      properties:
+        query:
+          type: string
+      required: [query]
+
+    ResearchResult:
+      type: object
+      properties:
+        query:
+          type: string
+        summary:
+          type: string
+        insights:
+          type: array
+          items:
+            type: string
+        conclusion:
+          type: string
+      required: [query, summary, insights, conclusion]
+
+    # ── Email Drafts ───────────────────────────────────────────
+    EmailDraft:
+      type: object
+      properties:
+        id:
+          type: integer
+        subject:
+          type: string
+        body:
+          type: string
+        recipient:
+          type: ["string", "null"]
+        context:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [draft, sent]
+        createdAt:
+          type: string
+      required: [id, subject, body, status, createdAt]
+
+    CreateEmailDraftBody:
+      type: object
+      properties:
+        subject:
+          type: string
+        body:
+          type: string
+        recipient:
+          type: ["string", "null"]
+        context:
+          type: ["string", "null"]
+      required: [subject, body]
+
+    GenerateEmailDraftBody:
+      type: object
+      properties:
+        context:
+          type: string
+        recipient:
+          type: ["string", "null"]
+        tone:
+          type: string
+          enum: [professional, casual, formal]
+      required: [context]
+
+    GeneratedEmail:
+      type: object
+      properties:
+        subject:
+          type: string
+        body:
+          type: string
+      required: [subject, body]
+
+    SummarizeEmailBody:
+      type: object
+      properties:
+        content:
+          type: string
+        sender:
+          type: ["string", "null"]
+        subject:
+          type: ["string", "null"]
+      required: [content]
+
+    EmailSummary:
+      type: object
+      properties:
+        summary:
+          type: string
+        keyPoints:
+          type: array
+          items:
+            type: string
+        actionRequired:
+          type: boolean
+      required: [summary, keyPoints, actionRequired]
+
+    # ── Social Posts ───────────────────────────────────────────
+    SocialPost:
+      type: object
+      properties:
+        id:
+          type: integer
+        topic:
+          type: string
+        content:
+          type: string
+        caption:
+          type: ["string", "null"]
+        hashtags:
+          type: ["string", "null"]
+        tone:
+          type: string
+          enum: [professional, casual, promotional]
+        platform:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, topic, content, tone, createdAt]
+
+    CreatePostBody:
+      type: object
+      properties:
+        topic:
+          type: string
+        content:
+          type: string
+        caption:
+          type: ["string", "null"]
+        hashtags:
+          type: ["string", "null"]
+        tone:
+          type: string
+          enum: [professional, casual, promotional]
+        platform:
+          type: ["string", "null"]
+      required: [topic, content, tone]
+
+    GeneratePostBody:
+      type: object
+      properties:
+        topic:
+          type: string
+        tone:
+          type: string
+          enum: [professional, casual, promotional]
+        platform:
+          type: ["string", "null"]
+        length:
+          type: string
+          enum: [short, long]
+      required: [topic, tone]
+
+    GeneratedPost:
+      type: object
+      properties:
+        content:
+          type: string
+        caption:
+          type: string
+        hashtags:
+          type: array
+          items:
+            type: string
+        hook:
+          type: string
+      required: [content, caption, hashtags, hook]
+
+    # ── Workflows ──────────────────────────────────────────────
+    Workflow:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        trigger:
+          type: string
+        steps:
+          type: string
+        enabled:
+          type: boolean
+        lastRunAt:
+          type: ["string", "null"]
+        lastRunStatus:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required: [id, name, trigger, steps, enabled, createdAt]
+
+    CreateWorkflowBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        trigger:
+          type: string
+        steps:
+          type: string
+      required: [name, trigger, steps]
+
+    UpdateWorkflowBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        trigger:
+          type: string
+        steps:
+          type: string
+        enabled:
+          type: boolean
+
+    WorkflowRunResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        output:
+          type: string
+        stepsExecuted:
+          type: integer
+        error:
+          type: ["string", "null"]
+      required: [success, output, stepsExecuted]
+
+    # ── Dashboard ──────────────────────────────────────────────
+    DashboardStats:
+      type: object
+      properties:
+        tasks:
+          $ref: "#/components/schemas/TaskStats"
+        totalConversations:
+          type: integer
+        totalResearchNotes:
+          type: integer
+        totalPosts:
+          type: integer
+        totalWorkflows:
+          type: integer
+        activeWorkflows:
+          type: integer
+      required: [tasks, totalConversations, totalResearchNotes, totalPosts, totalWorkflows, activeWorkflows]
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [task, research, email, post, workflow, chat]
+        description:
+          type: string
+        createdAt:
+          type: string
+      required: [id, type, description, createdAt]

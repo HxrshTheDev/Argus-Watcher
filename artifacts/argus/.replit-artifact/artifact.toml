@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Argus – Personal AI Assistant"
+version = "1.0.0"
+id = "artifacts/argus"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25063
+
+[services.development]
+run = "pnpm --filter @workspace/argus run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/argus", "run", "build" ]
+publicDir = "artifacts/argus/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25063"
+BASE_PATH = "/"

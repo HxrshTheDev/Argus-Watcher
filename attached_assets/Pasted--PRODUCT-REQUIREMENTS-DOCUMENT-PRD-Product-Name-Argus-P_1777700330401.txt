@@ -1,0 +1,381 @@
+# PRODUCT REQUIREMENTS DOCUMENT (PRD)
+
+## Product Name
+
+Argus – Personal AI Assistant
+
+---
+
+## 1. Vision
+
+Argus is a modular AI assistant that helps users manage daily tasks, perform research, draft emails, and create social media content. It combines an intelligent AI “brain” with a simple workflow automation system inspired by n8n.
+
+The system must be practical, safe, and extensible. Version 1 should prioritize reliability over complexity.
+
+---
+
+## 2. Core Principles
+
+* Simplicity over feature overload
+* Human-in-the-loop for all external actions
+* Modular architecture (tools + workflows)
+* Transparency in AI actions
+* Extensibility for future automation
+
+---
+
+## 3. Target Features (V1 Scope)
+
+### 3.1 Chat Assistant (Core)
+
+* Conversational interface
+* Understand user intent
+* Decide between:
+
+  * direct response
+  * tool usage
+* Maintain minimal session context
+
+---
+
+### 3.2 Email Assistant
+
+Capabilities:
+
+* Fetch recent emails
+* Summarize emails
+* Draft replies
+* Send emails ONLY after explicit confirmation
+
+UI:
+
+* Inbox preview (sender, subject, snippet)
+* “Summarize” button
+* “Draft reply” button
+* “Confirm & Send” step
+
+---
+
+### 3.3 Research Assistant
+
+Capabilities:
+
+* Answer queries with structured summaries
+* Break topics into key insights
+* Compare options
+* Save notes
+
+UI:
+
+* Research input box
+* Results panel with:
+
+  * summary
+  * bullet insights
+  * conclusion
+* Save to “Research Notes”
+
+---
+
+### 3.4 Task Manager
+
+Capabilities:
+
+* Create task
+* Edit task
+* Mark complete
+* Set due date
+* Set priority
+
+UI:
+
+* Clean list view
+* Filters (today, upcoming, completed)
+* Quick add input
+
+---
+
+### 3.5 Social Media Post Creator (NOT automation)
+
+Capabilities:
+
+* Generate:
+
+  * captions
+  * hooks
+  * hashtags
+  * short/long posts
+* Tone selection:
+
+  * professional
+  * casual
+  * promotional
+
+UI:
+
+* Input topic box
+* Tone selector
+* Output editor
+* Copy + Save
+
+---
+
+### 3.6 Workflow Engine (n8n-inspired, simplified)
+
+Structure:
+
+* JSON-based workflows
+
+Each workflow contains:
+
+* Trigger
+* Action(s)
+* Optional condition
+* Output
+
+Example:
+
+* Email received → summarize → draft reply
+
+Execution:
+
+* Sequential node execution
+* No complex branching in V1
+
+UI:
+
+* Basic visual blocks OR list-based builder
+* Save + Run workflow
+
+---
+
+## 4. System Architecture
+
+### 4.1 Backend
+
+* Python FastAPI
+
+Modules:
+
+* routes/
+* services/
+* models/
+* tools/
+* workflows/
+
+---
+
+### 4.2 AI Integration
+
+* Use OpenAI-compatible API
+* Configure via environment variables
+
+Environment Variables:
+
+* LLM_API_KEY (NVIDIA Nemotron key)
+* LLM_BASE_URL (Nemotron endpoint)
+* MODEL_NAME
+
+AI Responsibilities:
+
+* Intent detection
+* Tool selection
+* Content generation
+
+---
+
+### 4.3 Database
+
+* SQLite
+
+Tables:
+
+* users
+* tasks
+* research_notes
+* emails_cache
+* workflows
+* social_posts
+
+---
+
+### 4.4 Tool System
+
+Each tool = independent function
+
+Examples:
+
+* summarize_text
+* create_task
+* fetch_emails
+* draft_email
+* generate_post
+
+AI decides when to call tools.
+
+---
+
+### 4.5 Workflow Engine
+
+* Reads workflow JSON
+* Executes step-by-step
+* Passes output between nodes
+
+---
+
+## 5. UI / UX DESIGN
+
+### 5.1 Design Style
+
+* Minimal, modern, clean
+* Dark + light mode
+* Soft shadows, rounded corners
+* Neutral palette with one accent color
+
+Colors:
+
+* Background: #0f172a (dark)
+* Card: #1e293b
+* Accent: #6366f1 (indigo)
+* Text: #e2e8f0
+
+Typography:
+
+* Clean sans-serif
+* Medium weight headings
+* Comfortable spacing
+
+---
+
+### 5.2 Layout
+
+Main Dashboard Layout:
+
+* Left Sidebar:
+
+  * Chat
+  * Tasks
+  * Email
+  * Research
+  * Posts
+  * Workflows
+
+* Main Panel:
+
+  * Dynamic based on selection
+
+---
+
+### 5.3 Key UX Behaviors
+
+Chat:
+
+* Sticky input at bottom
+* Streaming responses (if possible)
+
+Tasks:
+
+* Checkbox interaction
+* Inline editing
+
+Email:
+
+* Click to expand
+* Action buttons visible
+
+Research:
+
+* Structured output
+* Save option
+
+Workflows:
+
+* Simple builder
+* Clear execution feedback
+
+---
+
+### 5.4 UX Rules
+
+* Never overload screen
+* Always show system status
+* Confirm before critical actions
+* Keep flows predictable
+
+---
+
+## 6. Safety & Guardrails
+
+* Confirm before:
+
+  * sending emails
+  * deleting tasks
+* Show preview before action
+* Log all actions
+* No hidden automation
+
+---
+
+## 7. Development Phases
+
+### Phase 1 (Foundation)
+
+* FastAPI setup
+* LLM integration
+* Chat working
+
+### Phase 2
+
+* Task manager
+* Research module
+
+### Phase 3
+
+* Email summarization + draft
+
+### Phase 4
+
+* Social post generator
+* Workflow engine
+
+### Phase 5
+
+* UI polish
+* Logging
+* Error handling
+
+---
+
+## 8. Acceptance Criteria
+
+* Chat works with AI
+* Tasks can be created and managed
+* Research queries produce structured answers
+* Emails can be summarized and drafted
+* Social posts can be generated (no auto posting)
+* Workflows execute step-by-step
+* App runs without major errors
+
+---
+
+## 9. Non-Goals (Important)
+
+* No WhatsApp automation
+* No call automation
+* No social media auto-posting
+* No complex workflow branching in V1
+
+---
+
+## 10. Setup Requirements
+
+* .env file required
+* Install dependencies
+* Run backend + frontend
+* Clear README instructions
+
+---
+
+## FINAL INSTRUCTION TO REPLIT AGENT
+
+Start by scaffolding the entire project structure. Then implement Phase 1 completely before moving to the next phases. Do not skip steps. Keep the code modular and clean.
