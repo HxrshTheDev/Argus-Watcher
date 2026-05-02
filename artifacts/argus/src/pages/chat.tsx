@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { 
   useListConversations, 
@@ -10,10 +10,69 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Send, Trash2, MessageSquare } from "lucide-react";
+import { Plus, Send, Trash2, MessageSquare, Mic, MicOff, Bot, User } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition;
+    webkitSpeechRecognition: typeof SpeechRecognition;
+  }
+}
+
+function useVoiceInput(onTranscript: (text: string) => void) {
+  const [isListening, setIsListening] = useState(false);
+  const [isSupported, setIsSupported] = useState(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  useEffect(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    setIsSupported(!!SR);
+  }, []);
+
+  const startListening = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+
+    const recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.onresult = (event) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      if (event.results[event.results.length - 1].isFinal) {
+        onTranscript(transcript.trim());
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, [onTranscript]);
+
+  const stopListening = useCallback(() => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
+  }, []);
+
+  const toggle = useCallback(() => {
+    if (isListening) stopListening();
+    else startListening();
+  }, [isListening, startListening, stopListening]);
+
+  return { isListening, isSupported, toggle };
+}
 
 export default function Chat() {
   const params = useParams();
@@ -33,6 +92,7 @@ export default function Chat() {
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -41,6 +101,13 @@ export default function Chat() {
   useEffect(() => {
     scrollToBottom();
   }, [conversation?.messages, streamingContent]);
+
+  const handleVoiceTranscript = useCallback((text: string) => {
+    setInput(prev => prev ? `${prev} ${text}` : text);
+    textareaRef.current?.focus();
+  }, []);
+
+  const { isListening, isSupported, toggle: toggleVoice } = useVoiceInput(handleVoiceTranscript);
 
   const handleCreate = () => {
     createMutation.mutate({ data: { title: "New Conversation" } }, {
@@ -51,7 +118,8 @@ export default function Chat() {
     });
   };
 
-  const handleDelete = (convId: number) => {
+  const handleDelete = (convId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
     deleteMutation.mutate({ id: convId }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListConversationsQueryKey() });
@@ -60,8 +128,8 @@ export default function Chat() {
     });
   };
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSend = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!input.trim() || !id || isStreaming) return;
 
     const messageContent = input;
@@ -69,7 +137,6 @@ export default function Chat() {
     setIsStreaming(true);
     setStreamingContent("");
 
-    // Optimistically update the UI with user message
     const tempMessage = {
       id: Date.now(),
       conversationId: id,
@@ -78,46 +145,34 @@ export default function Chat() {
       createdAt: new Date().toISOString()
     };
     
-    queryClient.setQueryData(getGetConversationQueryKey(id), (old: any) => {
-      if (!old) return old;
-      return {
-        ...old,
-        messages: [...(old.messages || []), tempMessage]
-      };
+    queryClient.setQueryData(getGetConversationQueryKey(id), (old: unknown) => {
+      if (!old || typeof old !== "object") return old;
+      const o = old as { messages?: unknown[] };
+      return { ...o, messages: [...(o.messages || []), tempMessage] };
     });
 
     try {
-      const response = await fetch(`/api/openai/conversations/${id}/messages`, {
+      const response = await fetch(`${BASE}/api/openai/conversations/${id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: messageContent }),
       });
 
       if (!response.body) throw new Error("No response body");
-
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-
-        for (const line of lines) {
+        for (const line of chunk.split("\n")) {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.content) {
-                setStreamingContent(prev => prev + data.content);
-              }
-              if (data.done) {
-                queryClient.invalidateQueries({ queryKey: getGetConversationQueryKey(id) });
-              }
-            } catch (e) {
-              // Ignore parse errors from partial chunks
-            }
+              if (data.content) setStreamingContent(prev => prev + data.content);
+              if (data.done) queryClient.invalidateQueries({ queryKey: getGetConversationQueryKey(id) });
+            } catch {}
           }
         }
       }
@@ -129,30 +184,40 @@ export default function Chat() {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   return (
     <div className="flex h-full w-full overflow-hidden">
       {/* Sidebar */}
-      <div className="w-64 border-r border-border bg-card/50 flex flex-col">
-        <div className="p-4 border-b border-border">
-          <Button onClick={handleCreate} className="w-full gap-2" disabled={createMutation.isPending}>
+      <div className="w-64 border-r border-border bg-card/30 flex flex-col shrink-0">
+        <div className="p-3 border-b border-border">
+          <Button onClick={handleCreate} className="w-full gap-2 h-9" size="sm" disabled={createMutation.isPending}>
             <Plus className="w-4 h-4" /> New Chat
           </Button>
         </div>
         <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
+          <div className="p-2 space-y-0.5">
+            {conversations?.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-6 px-2">No conversations yet. Start a new chat above.</p>
+            )}
             {conversations?.map((conv) => (
               <div
                 key={conv.id}
-                className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${
-                  id === conv.id ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                className={`group flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition-colors ${
+                  id === conv.id ? "bg-primary/10 text-primary" : "hover:bg-muted/60"
                 }`}
                 onClick={() => setLocation(`/chat/${conv.id}`)}
               >
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <MessageSquare className="w-4 h-4 shrink-0 opacity-70" />
-                  <div className="truncate text-sm">
-                    <div className="font-medium truncate">{conv.title}</div>
-                    <div className="text-[10px] opacity-70">
+                <div className="flex items-center gap-2 overflow-hidden min-w-0">
+                  <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                  <div className="min-w-0">
+                    <div className="font-medium truncate text-sm">{conv.title}</div>
+                    <div className="text-[10px] opacity-50 mt-0.5">
                       {formatDistanceToNow(new Date(conv.updatedAt), { addSuffix: true })}
                     </div>
                   </div>
@@ -160,11 +225,8 @@ export default function Chat() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="w-6 h-6 opacity-0 group-hover:opacity-100 text-destructive shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(conv.id);
-                  }}
+                  className="w-6 h-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0 ml-1"
+                  onClick={(e) => handleDelete(conv.id, e)}
                 >
                   <Trash2 className="w-3 h-3" />
                 </Button>
@@ -175,42 +237,58 @@ export default function Chat() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col bg-background relative">
+      <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
         {id ? (
           <>
-            <div className="p-4 border-b border-border bg-background/80 backdrop-blur-sm z-10 flex items-center justify-between">
-              <h2 className="font-semibold">{conversation?.title || "Conversation"}</h2>
+            <div className="px-6 py-3 border-b border-border bg-background/80 backdrop-blur-sm z-10 flex items-center gap-3">
+              <div className="bg-primary/10 text-primary p-1.5 rounded-full">
+                <Bot className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-sm leading-none">{conversation?.title || "Conversation"}</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Argus AI</p>
+              </div>
             </div>
             
-            <ScrollArea className="flex-1 p-4">
-              <div className="space-y-6 max-w-3xl mx-auto pb-4">
+            <ScrollArea className="flex-1 px-4">
+              <div className="space-y-4 max-w-3xl mx-auto py-6">
                 {isLoading ? (
-                  <div className="flex justify-center p-8 opacity-50">Loading...</div>
+                  <div className="flex justify-center p-8 opacity-40 text-sm">Loading...</div>
                 ) : conversation?.messages?.length ? (
                   conversation.messages.map((msg) => (
-                    <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div 
-                        className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-                          msg.role === "user" 
-                            ? "bg-primary text-primary-foreground" 
-                            : "bg-muted text-foreground"
-                        }`}
-                      >
+                    <div key={msg.id} className={`flex items-start gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                      <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs ${
+                        msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                      }`}>
+                        {msg.role === "user" ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                      </div>
+                      <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                        msg.role === "user" 
+                          ? "bg-primary text-primary-foreground rounded-tr-sm" 
+                          : "bg-muted text-foreground rounded-tl-sm"
+                      }`}>
                         <div className="whitespace-pre-wrap">{msg.content}</div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-20 text-muted-foreground">
-                    Send a message to start the conversation.
+                  <div className="text-center py-16 text-muted-foreground flex flex-col items-center gap-3">
+                    <Bot className="w-10 h-10 opacity-20" />
+                    <div>
+                      <p className="font-medium">Hi, I'm Argus</p>
+                      <p className="text-sm opacity-70 mt-1">Ask me anything — I can help with tasks, research, writing and more.</p>
+                    </div>
                   </div>
                 )}
                 
                 {isStreaming && (
-                  <div className="flex justify-start">
-                    <div className="max-w-[80%] rounded-2xl px-4 py-2 bg-muted text-foreground">
+                  <div className="flex items-start gap-3">
+                    <div className="shrink-0 w-7 h-7 rounded-full bg-muted flex items-center justify-center">
+                      <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+                    </div>
+                    <div className="max-w-[78%] rounded-2xl rounded-tl-sm px-4 py-2.5 bg-muted text-foreground text-sm leading-relaxed">
                       <div className="whitespace-pre-wrap">{streamingContent}</div>
-                      <span className="inline-block w-1.5 h-4 ml-1 bg-primary animate-pulse" />
+                      <span className="inline-block w-1.5 h-3.5 ml-0.5 bg-primary/70 animate-pulse rounded-sm" />
                     </div>
                   </div>
                 )}
@@ -218,30 +296,70 @@ export default function Chat() {
               </div>
             </ScrollArea>
 
-            <div className="p-4 bg-background">
-              <form onSubmit={handleSend} className="max-w-3xl mx-auto relative flex items-end">
-                <Input
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Message Argus..."
-                  className="w-full pr-12 rounded-xl border-input bg-card shadow-sm h-12"
-                  disabled={isStreaming}
-                />
-                <Button 
-                  type="submit" 
-                  size="icon" 
-                  className="absolute right-1 bottom-1 h-10 w-10 rounded-lg"
-                  disabled={!input.trim() || isStreaming}
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
+            <div className="p-4 bg-background border-t border-border">
+              <form onSubmit={handleSend} className="max-w-3xl mx-auto">
+                <div className="relative flex items-end gap-2 bg-card border border-input rounded-2xl shadow-sm px-4 py-2 focus-within:ring-1 focus-within:ring-primary/40 transition-shadow">
+                  <Textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={isListening ? "🎤 Listening..." : "Message Argus... (Enter to send, Shift+Enter for newline)"}
+                    className="flex-1 border-0 shadow-none focus-visible:ring-0 bg-transparent resize-none min-h-[24px] max-h-[160px] py-1 text-sm"
+                    rows={1}
+                    disabled={isStreaming}
+                  />
+                  <div className="flex items-center gap-1 mb-0.5 shrink-0">
+                    {isSupported && (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className={`h-8 w-8 rounded-lg transition-colors ${
+                          isListening 
+                            ? "text-destructive bg-destructive/10 hover:bg-destructive/20" 
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        onClick={toggleVoice}
+                        title={isListening ? "Stop listening" : "Voice input"}
+                        disabled={isStreaming}
+                      >
+                        {isListening 
+                          ? <MicOff className="w-4 h-4 animate-pulse" /> 
+                          : <Mic className="w-4 h-4" />}
+                      </Button>
+                    )}
+                    <Button 
+                      type="submit" 
+                      size="icon" 
+                      className="h-8 w-8 rounded-lg"
+                      disabled={!input.trim() || isStreaming}
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+                {isListening && (
+                  <p className="text-xs text-destructive text-center mt-2 flex items-center justify-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                    Listening — speak now, click mic to stop
+                  </p>
+                )}
               </form>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground flex-col gap-4">
-            <MessageSquare className="w-12 h-12 opacity-20" />
-            <p>Select a conversation or start a new one</p>
+          <div className="flex-1 flex items-center justify-center text-muted-foreground flex-col gap-6 p-8">
+            <div className="bg-primary/10 text-primary p-5 rounded-full">
+              <Bot className="w-10 h-10" />
+            </div>
+            <div className="text-center">
+              <h2 className="text-xl font-semibold text-foreground">Welcome to Argus Chat</h2>
+              <p className="mt-2 max-w-sm text-sm opacity-70">Start a new conversation or pick one from the sidebar. You can type or use your microphone.</p>
+            </div>
+            <Button onClick={handleCreate} className="gap-2" disabled={createMutation.isPending}>
+              <Plus className="w-4 h-4" /> Start a New Chat
+            </Button>
           </div>
         )}
       </div>
