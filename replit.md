@@ -71,8 +71,20 @@ All routes are prefixed with `/api`:
 - Frontend uses React Query hooks from `@workspace/api-client-react`
 - Chat uses `fetch` + `ReadableStream` for SSE (not mutation hook)
 
+## Gmail Integration (Pending)
+
+The Gmail inbox/send/reply feature is built and ready (`artifacts/api-server/src/routes/gmail.ts`).
+The Gmail OAuth connector (`connector:ccfg_google-mail_B959E7249792448ABBA58D46AF`) was dismissed by the user.
+
+To enable Gmail:
+- **Option A (Replit):** Re-run `proposeIntegration("connector:ccfg_google-mail_B959E7249792448ABBA58D46AF")` and complete the OAuth flow. Then set `GMAIL_CONNECTION_ID` in environment secrets.
+- **Option B (Manual):** Provide a Gmail OAuth refresh token + client credentials, and store them as secrets (`GMAIL_REFRESH_TOKEN`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`). The gmail.ts route will need updating to use these directly.
+
+Until connected, the Inbox tab in the Email module shows a "Gmail Not Connected" message gracefully.
+
 ## Environment Variables
 
 - `DATABASE_URL` — PostgreSQL connection string (auto-set by Replit)
 - `SESSION_SECRET` — session secret (set as Replit secret)
 - `OPENAI_API_KEY` — auto-set by Replit OpenAI integration
+- `GMAIL_CONNECTION_ID` — set after completing Gmail OAuth (optional, enables Inbox tab)
