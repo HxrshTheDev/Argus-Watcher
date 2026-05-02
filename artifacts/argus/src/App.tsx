@@ -14,12 +14,14 @@ import Posts from "@/pages/posts";
 import Workflows from "@/pages/workflows";
 import AppSidebar from "@/components/app-sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { NotificationsMonitor } from "@/components/notifications-monitor";
 
 const queryClient = new QueryClient();
 
 function Router() {
   return (
     <SidebarProvider>
+      <NotificationsMonitor />
       <div className="flex h-[100dvh] w-full bg-background overflow-hidden text-foreground">
         <AppSidebar />
         <main className="flex-1 flex flex-col h-full relative overflow-hidden">

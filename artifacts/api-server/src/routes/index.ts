@@ -8,6 +8,7 @@ import emailsRouter from "./emails";
 import postsRouter from "./posts";
 import workflowsRouter from "./workflows";
 import dashboardRouter from "./dashboard";
+import gmailRouter from "./gmail";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(emailsRouter);
 router.use(postsRouter);
 router.use(workflowsRouter);
 router.use(dashboardRouter);
+router.use(gmailRouter);
 
 export default router;
