@@ -25,6 +25,7 @@ type TaskFilter = "all" | "today" | "upcoming" | "high";
 type Tab        = "overview" | "tasks" | "habits";
 type HabitFreq  = "daily" | "weekdays" | "weekly";
 type TimerMode  = "work" | "short" | "long";
+type Recurrence = "daily" | "weekdays" | "weekly" | "biweekly" | "monthly";
 
 interface Goal      { id: string; text: string; }
 interface FocusItem { id: string; text: string; done: boolean; }
@@ -48,9 +49,19 @@ const LONG_BREAK    = 15 * 60;
 const TIMER_KEY     = "argus_timer_v3";
 const TIMES_KEY     = "argus_task_times";
 const POMO_CNT_KEY  = "argus_pomo_counts";
+const RECUR_KEY     = "argus_recurrence";
 const GOALS_KEY     = "argus_goals";
 const HABITS_KEY    = "argus_habits_v2";
 const BASE          = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const RECUR_LABELS: Record<Recurrence, string> = {
+  daily:    "Daily",
+  weekdays: "Weekdays",
+  weekly:   "Weekly",
+  biweekly: "Every 2 weeks",
+  monthly:  "Monthly",
+};
+const RECUR_OPTS: Recurrence[] = ["daily", "weekdays", "weekly", "biweekly", "monthly"];
 
 const MODE_DURATIONS: Record<TimerMode, number> = {
   work:  POMODORO,
@@ -118,6 +129,32 @@ function fmt12(t: string): string {
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 function todayKey() { return new Date().toISOString().split("T")[0]; }
+
+/* ── Recurrence helpers ── */
+function getRecurrences(): Record<string, Recurrence> { return ls(RECUR_KEY, {}); }
+function getRecurrence(id: number): Recurrence | null { return getRecurrences()[String(id)] ?? null; }
+function setRecurrence(id: number, rule: Recurrence | null) {
+  const map = getRecurrences();
+  if (rule) { map[String(id)] = rule; } else { delete map[String(id)]; }
+  lsSave(RECUR_KEY, map);
+}
+function transferRecurrence(fromId: number, toId: number) {
+  const rule = getRecurrence(fromId);
+  if (rule) { setRecurrence(fromId, null); setRecurrence(toId, rule); }
+}
+
+function nextDueDate(dueDate: string, rule: Recurrence): string {
+  const d = new Date(dueDate + "T12:00:00");
+  if (rule === "daily")    { d.setDate(d.getDate() + 1); }
+  else if (rule === "weekdays") {
+    d.setDate(d.getDate() + 1);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  }
+  else if (rule === "weekly")   { d.setDate(d.getDate() + 7); }
+  else if (rule === "biweekly") { d.setDate(d.getDate() + 14); }
+  else if (rule === "monthly")  { d.setMonth(d.getMonth() + 1); }
+  return d.toISOString().split("T")[0];
+}
 
 /* ─────────────────────────────────────────────────────────
    AUDIO — gentle beep when timer ends
@@ -348,6 +385,7 @@ const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, on
   const [title, setTitle]   = useState(task.title);
   const [desc, setDesc]     = useState(task.description ?? "");
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
+  const [recurRule, setRecurRule] = useState<Recurrence | null>(() => getRecurrence(task.id));
   const taskTime  = useTaskTime(task.id);
   const subtasks  = useSubtasks(task.id);
   const [newSub, setNewSub] = useState("");
@@ -355,6 +393,8 @@ const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, on
   const [pomoCount, setPomoCount] = useState(() => getTaskPomoCount(task.id));
   const today       = todayKey();
   const isTimerTask = timer.taskId === task.id;
+
+  const saveRecur = (r: Recurrence | null) => { setRecurRule(r); setRecurrence(task.id, r); };
 
   // Tick for ring + pomo count refresh
   useEffect(() => {
@@ -444,6 +484,37 @@ const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, on
                   <CalendarClock className="w-3.5 h-3.5" />
                   {format(parseISO(dueDate), "EEEE, MMMM d")}
                   {taskTime.time && <span className="text-primary/70">at {fmt12(taskTime.time)}</span>}
+                </p>
+              </div>
+            )}
+
+            {/* Repeat / Recurrence */}
+            <div className="flex items-start gap-3 px-4 py-3">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground w-16 shrink-0 pt-0.5">Repeat</span>
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => saveRecur(null)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all
+                    ${!recurRule ? "bg-muted text-foreground border-border" : "border-border/50 text-muted-foreground hover:text-foreground"}`}>
+                  None
+                </button>
+                {RECUR_OPTS.map(r => (
+                  <button key={r} onClick={() => saveRecur(recurRule === r ? null : r)}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all
+                      ${recurRule === r ? "bg-primary/10 text-primary border-primary/25" : "border-border/50 text-muted-foreground hover:text-foreground"}`}>
+                    {recurRule === r && <Repeat2 className="w-2.5 h-2.5" />}
+                    {RECUR_LABELS[r]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {recurRule && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-primary/3">
+                <span className="w-16 shrink-0" />
+                <p className="text-[11px] text-primary/80 font-medium flex items-center gap-1.5">
+                  <Repeat2 className="w-3 h-3" />
+                  Repeats {RECUR_LABELS[recurRule].toLowerCase()}
+                  {dueDate ? ` · next on ${format(parseISO(nextDueDate(dueDate, recurRule)), "MMM d")}` : ""}
                 </p>
               </div>
             )}
@@ -688,6 +759,11 @@ const TaskCard = memo(function TaskCard({ task, isSelected, taskTime, todayStr, 
                 <Timer className="w-2.5 h-2.5" />{timer.running ? "Focusing" : "Paused"}
               </span>
             )}
+            {(() => { const r = getRecurrence(task.id); return r ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-violet-400/20 bg-violet-400/8 text-[10px] font-semibold text-violet-400">
+                <Repeat2 className="w-2.5 h-2.5" />{RECUR_LABELS[r]}
+              </span>
+            ) : null; })()}
           </div>
         )}
       </div>
@@ -707,14 +783,15 @@ const TaskCard = memo(function TaskCard({ task, isSelected, taskTime, todayStr, 
 /* ─────────────────────────────────────────────────────────
    ADD TASK FORM — Notion-style inline
 ───────────────────────────────────────────────────────── */
-interface CreateData { title: string; priority: Priority; dueDate?: string; dueTime?: string; }
+interface CreateData { title: string; priority: Priority; dueDate?: string; dueTime?: string; recurrence?: Recurrence; }
 
 function AddTaskForm({ onCreate }: { onCreate: (d: CreateData) => void }) {
-  const [open, setOpen]         = useState(false);
-  const [title, setTitle]       = useState("");
-  const [priority, setPriority] = useState<Priority>("medium");
-  const [dueDate, setDueDate]   = useState("");
-  const [dueTime, setDueTime]   = useState("");
+  const [open, setOpen]           = useState(false);
+  const [title, setTitle]         = useState("");
+  const [priority, setPriority]   = useState<Priority>("medium");
+  const [dueDate, setDueDate]     = useState("");
+  const [dueTime, setDueTime]     = useState("");
+  const [recurrence, setRecurrence] = useState<Recurrence | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const today    = todayKey();
   const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split("T")[0];
@@ -722,8 +799,13 @@ function AddTaskForm({ onCreate }: { onCreate: (d: CreateData) => void }) {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onCreate({ title: title.trim(), priority, ...(dueDate ? { dueDate } : {}), ...(dueDate && dueTime ? { dueTime } : {}) });
-    setTitle(""); setDueDate(""); setDueTime(""); setPriority("medium"); setOpen(false);
+    onCreate({
+      title: title.trim(), priority,
+      ...(dueDate ? { dueDate } : {}),
+      ...(dueDate && dueTime ? { dueTime } : {}),
+      ...(recurrence ? { recurrence } : {}),
+    });
+    setTitle(""); setDueDate(""); setDueTime(""); setPriority("medium"); setRecurrence(null); setOpen(false);
   };
 
   const quickDate = (d: string) => { setDueDate(d === dueDate ? "" : d); if (!d) setDueTime(""); };
@@ -809,13 +891,32 @@ function AddTaskForm({ onCreate }: { onCreate: (d: CreateData) => void }) {
               </button>
             </div>
 
+            {/* Repeat row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 w-10">🔄 Rep</span>
+              <button type="button" onClick={() => setRecurrence(null)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all
+                  ${!recurrence ? "bg-muted text-foreground border-border" : "border-border/50 text-muted-foreground hover:text-foreground"}`}>
+                None
+              </button>
+              {RECUR_OPTS.map(r => (
+                <button key={r} type="button" onClick={() => setRecurrence(recurrence === r ? null : r)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all
+                    ${recurrence === r ? "bg-violet-500/10 text-violet-400 border-violet-400/25" : "border-border/50 text-muted-foreground hover:text-foreground"}`}>
+                  {recurrence === r && <Repeat2 className="w-2.5 h-2.5" />}
+                  {RECUR_LABELS[r]}
+                </button>
+              ))}
+            </div>
+
             {/* Preview */}
-            {(dueDate || dueTime) && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/40">
+            {(dueDate || dueTime || recurrence) && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/40 flex-wrap">
                 <CalendarClock className="w-3 h-3 text-primary/70" />
                 <span className="text-[11px] text-muted-foreground">
-                  Due <strong className="text-foreground">{dueDate === today ? "today" : dueDate === tomorrow ? "tomorrow" : format(parseISO(dueDate), "MMM d")}</strong>
+                  {dueDate && <>Due <strong className="text-foreground">{dueDate === today ? "today" : dueDate === tomorrow ? "tomorrow" : format(parseISO(dueDate), "MMM d")}</strong></>}
                   {dueTime && <> at <strong className="text-foreground">{fmt12(dueTime)}</strong></>}
+                  {recurrence && <span className="text-violet-400 font-semibold"> · repeats {RECUR_LABELS[recurrence].toLowerCase()}</span>}
                 </span>
               </div>
             )}
@@ -1475,18 +1576,51 @@ export default function Tracker() {
   const timer = useTaskTimer();
 
   const handleCreate = useCallback((data: CreateData) => {
-    const { dueTime, ...taskData } = data;
-    createTask({ data: taskData }, { onSuccess: (t: any) => { if (dueTime && t?.id) saveTaskTime(t.id, dueTime); inv(); } });
+    const { dueTime, recurrence, ...taskData } = data;
+    createTask({ data: taskData }, {
+      onSuccess: (t: any) => {
+        if (t?.id) {
+          if (dueTime) saveTaskTime(t.id, dueTime);
+          if (recurrence) setRecurrence(t.id, recurrence);
+        }
+        inv();
+      },
+    });
   }, [createTask, inv]);
 
-  const handleToggle = useCallback((id: number, completed: boolean) =>
-    updateTask({ id, data: { completed: !completed } }, { onSuccess: inv }), [updateTask, inv]);
+  const handleToggle = useCallback((id: number, completed: boolean) => {
+    // Completing → check for recurrence and spawn next occurrence
+    if (!completed) {
+      const rule    = getRecurrence(id);
+      const tasks_  = queryClient.getQueryData<any[]>(getListTasksQueryKey()) ?? [];
+      const task    = tasks_.find((t: any) => t.id === id);
+      if (rule && task) {
+        const baseDue = task.dueDate ?? todayKey();
+        const nd      = nextDueDate(baseDue, rule);
+        const oldTime = getTaskTime(id);
+        createTask(
+          { data: { title: task.title, priority: task.priority, dueDate: nd } },
+          { onSuccess: (newTask: any) => {
+              if (newTask?.id) {
+                transferRecurrence(id, newTask.id);
+                if (oldTime) saveTaskTime(newTask.id, oldTime);
+              }
+              inv();
+            },
+          },
+        );
+      }
+    }
+    updateTask({ id, data: { completed: !completed } }, { onSuccess: inv });
+  }, [updateTask, createTask, queryClient, inv]);
 
   const handleUpdate = useCallback((id: number, data: any) =>
     updateTask({ id, data }, { onSuccess: inv }), [updateTask, inv]);
 
-  const handleDelete = useCallback((id: number) =>
-    deleteTask({ id }, { onSuccess: inv }), [deleteTask, inv]);
+  const handleDelete = useCallback((id: number) => {
+    setRecurrence(id, null);
+    deleteTask({ id }, { onSuccess: inv });
+  }, [deleteTask, inv]);
 
   const goToTasks = useCallback(() => setTab("tasks"), []);
 
