@@ -8,42 +8,70 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isToday, isTomorrow, isPast, addDays } from "date-fns";
 import {
   Plus, Trash2, Flag, Check, X, Target, Flame, Repeat2,
   CheckCircle2, Circle, Timer, Play, Pause, RotateCcw,
   ChevronRight, ChevronLeft, CalendarDays, Clock, Pencil,
-  Sparkles, LayoutDashboard, CheckSquare, BarChart2,
+  Sparkles, LayoutDashboard, CheckSquare, BarChart2, Coffee,
+  AlertCircle, Hourglass, CalendarClock,
 } from "lucide-react";
 
 /* ─────────────────────────────────────────────────────────
    TYPES
 ───────────────────────────────────────────────────────── */
-type Priority = "low" | "medium" | "high";
+type Priority   = "low" | "medium" | "high";
 type TaskFilter = "all" | "today" | "upcoming" | "high";
-type Tab = "overview" | "tasks" | "habits";
-type HabitFreq = "daily" | "weekdays" | "weekly";
+type Tab        = "overview" | "tasks" | "habits";
+type HabitFreq  = "daily" | "weekdays" | "weekly";
+type TimerMode  = "work" | "short" | "long";
 
 interface Goal      { id: string; text: string; }
 interface FocusItem { id: string; text: string; done: boolean; }
 interface Habit     { id: string; name: string; emoji: string; frequency: HabitFreq; completions: Record<string, boolean>; }
 interface Subtask   { id: string; text: string; done: boolean; }
-interface TimerState { taskId: number | null; remainingSeconds: number; running: boolean; startedAt: number | null; }
+interface TimerState {
+  taskId: number | null;
+  remainingSeconds: number;
+  running: boolean;
+  startedAt: number | null;
+  mode: TimerMode;
+  cycleCount: number; // work sessions completed in current 4-session cycle
+}
 
 /* ─────────────────────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────────────────────── */
 const POMODORO      = 25 * 60;
-const TIMER_KEY     = "argus_timer_v2";
+const SHORT_BREAK   = 5  * 60;
+const LONG_BREAK    = 15 * 60;
+const TIMER_KEY     = "argus_timer_v3";
 const TIMES_KEY     = "argus_task_times";
+const POMO_CNT_KEY  = "argus_pomo_counts";
 const GOALS_KEY     = "argus_goals";
 const HABITS_KEY    = "argus_habits_v2";
 const BASE          = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const P_CFG: Record<Priority, { label: string; color: string; ring: string; bg: string; dot: string }> = {
-  high:   { label: "High",   color: "text-rose-500",  ring: "border-rose-500",  bg: "bg-rose-500/10",  dot: "bg-rose-500"  },
-  medium: { label: "Medium", color: "text-amber-500", ring: "border-amber-500", bg: "bg-amber-500/10", dot: "bg-amber-500" },
-  low:    { label: "Low",    color: "text-blue-400",  ring: "border-blue-400",  bg: "bg-blue-400/10",  dot: "bg-blue-400"  },
+const MODE_DURATIONS: Record<TimerMode, number> = {
+  work:  POMODORO,
+  short: SHORT_BREAK,
+  long:  LONG_BREAK,
+};
+const MODE_LABELS: Record<TimerMode, string> = {
+  work:  "Focus · 25 min",
+  short: "Short Break · 5 min",
+  long:  "Long Break · 15 min",
+};
+const MODE_COLORS: Record<TimerMode, string> = {
+  work:  "text-primary",
+  short: "text-emerald-400",
+  long:  "text-violet-400",
+};
+
+const P_CFG: Record<Priority, { label: string; color: string; ring: string; bg: string; dot: string; chip: string }> = {
+  high:   { label: "High",   color: "text-rose-500",  ring: "border-rose-500",  bg: "bg-rose-500/10",  dot: "bg-rose-500",  chip: "bg-rose-500/10 text-rose-500 border-rose-500/20"   },
+  medium: { label: "Med",    color: "text-amber-500", ring: "border-amber-500", bg: "bg-amber-500/10", dot: "bg-amber-500", chip: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
+  low:    { label: "Low",    color: "text-blue-400",  ring: "border-blue-400",  bg: "bg-blue-400/10",  dot: "bg-blue-400",  chip: "bg-blue-400/10 text-blue-400 border-blue-400/20"   },
 };
 
 const HABIT_EMOJIS = ["🏃", "📚", "💧", "🧘", "💪", "🎯", "🛌", "🥗", "✍️", "🌿", "🎵", "🧹"];
@@ -75,6 +103,15 @@ function saveTaskTime(id: number, t: string) {
   lsSave(TIMES_KEY, map);
 }
 function getTaskTime(id: number): string { return getTaskTimes()[String(id)] ?? ""; }
+
+function getTaskPomoCounts(): Record<string, number> { return ls(POMO_CNT_KEY, {}); }
+function getTaskPomoCount(id: number): number { return getTaskPomoCounts()[String(id)] ?? 0; }
+function incTaskPomoCount(id: number) {
+  const map = getTaskPomoCounts();
+  map[String(id)] = (map[String(id)] ?? 0) + 1;
+  lsSave(POMO_CNT_KEY, map);
+}
+
 function fmt12(t: string): string {
   if (!t) return "";
   const [h, m] = t.split(":").map(Number);
@@ -83,10 +120,30 @@ function fmt12(t: string): string {
 function todayKey() { return new Date().toISOString().split("T")[0]; }
 
 /* ─────────────────────────────────────────────────────────
+   AUDIO — gentle beep when timer ends
+───────────────────────────────────────────────────────── */
+function playDone(mode: TimerMode) {
+  try {
+    const ctx = new AudioContext();
+    const freqs = mode === "work" ? [523, 659, 784] : [784, 659, 523];
+    freqs.forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = "sine";
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0, ctx.currentTime + i * 0.15);
+      g.gain.linearRampToValueAtTime(0.25, ctx.currentTime + i * 0.15 + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.4);
+      o.start(ctx.currentTime + i * 0.15);
+      o.stop(ctx.currentTime + i * 0.15 + 0.45);
+    });
+  } catch { /* no audio context */ }
+}
+
+/* ─────────────────────────────────────────────────────────
    HOOKS
 ───────────────────────────────────────────────────────── */
-
-/** Ticks every second — only mount this at top level once */
 function useClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -109,7 +166,7 @@ function initTimerState(): TimerState {
       return p;
     }
   } catch { /* noop */ }
-  return { taskId: null, remainingSeconds: POMODORO, running: false, startedAt: null };
+  return { taskId: null, remainingSeconds: POMODORO, running: false, startedAt: null, mode: "work", cycleCount: 0 };
 }
 
 function useTaskTimer() {
@@ -117,20 +174,38 @@ function useTaskTimer() {
   const stRef = useRef(st);
   stRef.current = st;
 
+  // Countdown tick
   useEffect(() => {
     if (!st.running) return;
     const id = setInterval(() => {
-      setSt(prev => {
-        if (!prev.running || !prev.startedAt) return prev;
-        const elapsed = Math.floor((Date.now() - prev.startedAt) / 1000);
-        const rem = Math.max(0, prev.remainingSeconds - elapsed);
-        if (rem <= 0) {
-          const next = { ...prev, running: false, remainingSeconds: 0, startedAt: null };
-          lsSave(TIMER_KEY, next);
-          return next;
+      const s = stRef.current;
+      if (!s.running || !s.startedAt) return;
+      const elapsed  = Math.floor((Date.now() - s.startedAt) / 1000);
+      const rem      = Math.max(0, s.remainingSeconds - elapsed);
+      if (rem <= 0) {
+        playDone(s.mode);
+        // Advance mode
+        let nextMode: TimerMode;
+        let nextCycle = s.cycleCount;
+        if (s.mode === "work") {
+          nextCycle = s.cycleCount + 1;
+          if (nextCycle >= 4) { nextMode = "long"; nextCycle = 0; }
+          else                { nextMode = "short"; }
+          if (s.taskId !== null) incTaskPomoCount(s.taskId);
+        } else {
+          nextMode = "work";
         }
-        return prev; // no state change — only re-render via getRem()
-      });
+        const next: TimerState = {
+          taskId: s.taskId,
+          remainingSeconds: MODE_DURATIONS[nextMode],
+          running: false,
+          startedAt: null,
+          mode: nextMode,
+          cycleCount: nextCycle,
+        };
+        lsSave(TIMER_KEY, next);
+        setSt(next);
+      }
     }, 500);
     return () => clearInterval(id);
   }, [st.running]);
@@ -143,26 +218,43 @@ function useTaskTimer() {
     return s.remainingSeconds;
   }, []);
 
-  const start = useCallback((id: number) => {
-    const next: TimerState = { taskId: id, remainingSeconds: POMODORO, running: true, startedAt: Date.now() };
+  const start = useCallback((taskId: number, mode: TimerMode = "work") => {
+    const next: TimerState = {
+      taskId,
+      remainingSeconds: MODE_DURATIONS[mode],
+      running: true,
+      startedAt: Date.now(),
+      mode,
+      cycleCount: stRef.current.cycleCount,
+    };
     setSt(next); lsSave(TIMER_KEY, next);
   }, []);
+
   const pause = useCallback(() => {
     setSt(p => {
-      const rem = p.startedAt ? Math.max(0, p.remainingSeconds - Math.floor((Date.now() - p.startedAt) / 1000)) : p.remainingSeconds;
+      const rem  = p.startedAt ? Math.max(0, p.remainingSeconds - Math.floor((Date.now() - p.startedAt) / 1000)) : p.remainingSeconds;
       const next = { ...p, remainingSeconds: rem, running: false, startedAt: null };
       lsSave(TIMER_KEY, next); return next;
     });
   }, []);
+
   const resume = useCallback(() => {
     setSt(p => { const next = { ...p, running: true, startedAt: Date.now() }; lsSave(TIMER_KEY, next); return next; });
   }, []);
+
   const reset = useCallback(() => {
-    const next: TimerState = { taskId: null, remainingSeconds: POMODORO, running: false, startedAt: null };
+    const next: TimerState = { taskId: null, remainingSeconds: POMODORO, running: false, startedAt: null, mode: "work", cycleCount: 0 };
     setSt(next); lsSave(TIMER_KEY, next);
   }, []);
 
-  return { taskId: st.taskId, running: st.running, getRem, fmt: fmtTime, start, pause, resume, reset };
+  const skipBreak = useCallback(() => {
+    setSt(p => {
+      const next = { ...p, mode: "work" as TimerMode, remainingSeconds: POMODORO, running: false, startedAt: null };
+      lsSave(TIMER_KEY, next); return next;
+    });
+  }, []);
+
+  return { taskId: st.taskId, running: st.running, mode: st.mode, cycleCount: st.cycleCount, getRem, fmt: fmtTime, start, pause, resume, reset, skipBreak };
 }
 
 function fmtTime(s: number) {
@@ -172,13 +264,8 @@ function fmtTime(s: number) {
 function useSubtasks(taskId: number | null) {
   const key = taskId ? `argus_subtasks_${taskId}` : null;
   const [items, setItems] = useState<Subtask[]>(() => key ? ls(key, []) : []);
-  useEffect(() => {
-    setItems(key ? ls(key, []) : []);
-  }, [key]);
-  const save = (next: Subtask[]) => {
-    setItems(next);
-    if (key) lsSave(key, next);
-  };
+  useEffect(() => { setItems(key ? ls(key, []) : []); }, [key]);
+  const save = (next: Subtask[]) => { setItems(next); if (key) lsSave(key, next); };
   return {
     items,
     add:    (text: string) => save([...items, { id: crypto.randomUUID(), text, done: false }]),
@@ -198,19 +285,33 @@ function useTaskTime(taskId: number | null) {
 /* ─────────────────────────────────────────────────────────
    SHARED UI ATOMS
 ───────────────────────────────────────────────────────── */
-function TimerRing({ remaining, size = 96, stroke = 7 }: { remaining: number; size?: number; stroke?: number }) {
-  const r = (size - stroke) / 2;
+function TimerRing({ remaining, total, mode = "work", size = 96, stroke = 7 }: {
+  remaining: number; total: number; mode?: TimerMode; size?: number; stroke?: number;
+}) {
+  const r    = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
-  const pct = remaining / POMODORO;
-  const color = pct > 0.5 ? "hsl(217 91% 62%)" : pct > 0.2 ? "hsl(38 92% 50%)" : "hsl(0 82% 60%)";
+  const pct  = remaining / total;
+  const color = mode === "short" ? "hsl(152 60% 55%)"
+              : mode === "long"  ? "hsl(263 60% 65%)"
+              : pct > 0.5 ? "hsl(217 91% 62%)" : pct > 0.2 ? "hsl(38 92% 50%)" : "hsl(0 82% 60%)";
   return (
     <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} stroke="hsl(var(--muted))" />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} stroke={color}
+      <circle cx={size/2} cy={size/2} r={r} fill="none" strokeWidth={stroke} stroke="hsl(var(--muted))" />
+      <circle cx={size/2} cy={size/2} r={r} fill="none" strokeWidth={stroke} stroke={color}
         strokeDasharray={circ} strokeDashoffset={circ * (1 - pct)} strokeLinecap="round"
         style={{ transition: "stroke-dashoffset 0.5s linear, stroke 1s ease" }}
       />
     </svg>
+  );
+}
+
+function PomoDots({ cycleCount }: { cycleCount: number }) {
+  return (
+    <div className="flex items-center gap-1">
+      {[0, 1, 2, 3].map(i => (
+        <div key={i} className={`w-2 h-2 rounded-full transition-all ${i < cycleCount ? "bg-primary" : "bg-muted-foreground/20"}`} />
+      ))}
+    </div>
   );
 }
 
@@ -244,29 +345,29 @@ interface DetailProps {
 }
 
 const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, onDelete, onTimeChange }: DetailProps) {
-  const [title, setTitle] = useState(task.title);
-  const [desc, setDesc] = useState(task.description ?? "");
+  const [title, setTitle]   = useState(task.title);
+  const [desc, setDesc]     = useState(task.description ?? "");
   const [dueDate, setDueDate] = useState(task.dueDate ?? "");
-  const taskTime = useTaskTime(task.id);
-  const subtasks = useSubtasks(task.id);
+  const taskTime  = useTaskTime(task.id);
+  const subtasks  = useSubtasks(task.id);
   const [newSub, setNewSub] = useState("");
-  const [rem, setRem] = useState(timer.getRem());
-  const today = todayKey();
+  const [rem, setRem]       = useState(timer.getRem());
+  const [pomoCount, setPomoCount] = useState(() => getTaskPomoCount(task.id));
+  const today       = todayKey();
   const isTimerTask = timer.taskId === task.id;
 
-  // Tick for the timer ring
+  // Tick for ring + pomo count refresh
   useEffect(() => {
-    const id = setInterval(() => setRem(timer.getRem()), 500);
+    const id = setInterval(() => {
+      setRem(timer.getRem());
+      setPomoCount(getTaskPomoCount(task.id));
+    }, 500);
     return () => clearInterval(id);
-  }, [timer]);
+  }, [timer, task.id]);
 
-  const saveTitle = () => {
-    if (title.trim() && title !== task.title) onUpdate(task.id, { title: title.trim() });
-  };
-  const saveDesc = () => {
-    if (desc !== (task.description ?? "")) onUpdate(task.id, { description: desc || null });
-  };
-  const saveDue = (v: string) => {
+  const saveTitle = () => { if (title.trim() && title !== task.title) onUpdate(task.id, { title: title.trim() }); };
+  const saveDesc  = () => { if (desc !== (task.description ?? "")) onUpdate(task.id, { description: desc || null }); };
+  const saveDue   = (v: string) => {
     setDueDate(v);
     onUpdate(task.id, { dueDate: v || null });
     if (!v) { taskTime.save(""); onTimeChange(); }
@@ -277,6 +378,9 @@ const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, on
     if (newSub.trim()) { subtasks.add(newSub.trim()); setNewSub(""); }
   };
 
+  const currentTotal = isTimerTask ? MODE_DURATIONS[timer.mode] : POMODORO;
+  const currentMode  = isTimerTask ? timer.mode : "work";
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
@@ -286,8 +390,7 @@ const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, on
         </button>
         <input value={title} onChange={e => setTitle(e.target.value)} onBlur={saveTitle}
           onKeyDown={e => { if (e.key === "Enter") { saveTitle(); (e.target as HTMLInputElement).blur(); } }}
-          className="flex-1 min-w-0 bg-transparent text-[15px] font-bold tracking-tight focus:outline-none"
-        />
+          className="flex-1 min-w-0 bg-transparent text-[15px] font-bold tracking-tight focus:outline-none" />
         <div className="flex items-center gap-1 shrink-0">
           <button onClick={() => onUpdate(task.id, { completed: !task.completed })}
             className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${task.completed ? "bg-emerald-500/12 text-emerald-500" : "text-muted-foreground hover:bg-muted hover:text-emerald-500"}`}>
@@ -302,37 +405,47 @@ const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, on
 
       <ScrollArea className="flex-1">
         <div className="p-5 space-y-5">
-          {/* Priority */}
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Priority</label>
-            <PriorityPicker value={(task.priority as Priority) || "medium"} onChange={p => onUpdate(task.id, { priority: p })} />
-          </div>
-
-          {/* Schedule */}
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Schedule</label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                <input type="date" value={dueDate} onChange={e => saveDue(e.target.value)} min={today}
-                  className="w-full h-9 pl-9 pr-3 rounded-lg border border-input bg-muted/30 text-[13px] focus:outline-none focus:ring-2 focus:ring-primary/25 transition-all" />
-              </div>
-              <div className={`relative w-32 transition-opacity ${dueDate ? "opacity-100" : "opacity-40 pointer-events-none"}`}>
-                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                <input type="time" value={taskTime.time} onChange={e => saveTime(e.target.value)} disabled={!dueDate}
-                  className="w-full h-9 pl-9 pr-2 rounded-lg border border-input bg-muted/30 text-[13px] focus:outline-none focus:ring-2 focus:ring-primary/25 transition-all disabled:cursor-not-allowed" />
-              </div>
-              {dueDate && (
-                <button onClick={() => saveDue("")}
-                  className="w-9 h-9 rounded-lg flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-destructive transition-all shrink-0">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+          {/* Properties row */}
+          <div className="rounded-xl border border-border bg-card/50 divide-y divide-border/50">
+            {/* Priority */}
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground w-16 shrink-0">Priority</span>
+              <PriorityPicker value={(task.priority as Priority) || "medium"} onChange={p => onUpdate(task.id, { priority: p })} />
             </div>
-            {dueDate && taskTime.time && (
-              <p className="mt-1.5 text-[11px] text-primary/80 font-semibold flex items-center gap-1">
-                <Clock className="w-3 h-3" />Scheduled for {format(parseISO(dueDate), "MMM d")} at {fmt12(taskTime.time)}
-              </p>
+
+            {/* Due date */}
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground w-16 shrink-0">Due</span>
+              <div className="flex items-center gap-2 flex-1 flex-wrap">
+                <div className="relative">
+                  <CalendarDays className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                  <input type="date" value={dueDate} onChange={e => saveDue(e.target.value)} min={today}
+                    className="h-8 pl-8 pr-2 rounded-lg border border-input bg-muted/30 text-[12px] focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all" />
+                </div>
+                <div className={`relative transition-opacity ${dueDate ? "opacity-100" : "opacity-30 pointer-events-none"}`}>
+                  <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                  <input type="time" value={taskTime.time} onChange={e => saveTime(e.target.value)} disabled={!dueDate}
+                    className="h-8 pl-8 pr-2 rounded-lg border border-input bg-muted/30 text-[12px] focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all disabled:cursor-not-allowed" />
+                </div>
+                {dueDate && (
+                  <button onClick={() => saveDue("")}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-destructive transition-all">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Scheduled preview */}
+            {dueDate && (
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/3">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground w-16 shrink-0">When</span>
+                <p className="text-[12px] text-primary font-semibold flex items-center gap-1.5">
+                  <CalendarClock className="w-3.5 h-3.5" />
+                  {format(parseISO(dueDate), "EEEE, MMMM d")}
+                  {taskTime.time && <span className="text-primary/70">at {fmt12(taskTime.time)}</span>}
+                </p>
+              </div>
             )}
           </div>
 
@@ -341,7 +454,7 @@ const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, on
             <label className="block text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Notes</label>
             <textarea value={desc} onChange={e => setDesc(e.target.value)} onBlur={saveDesc}
               placeholder="Add notes, links, or context…" rows={4}
-              className="w-full px-3.5 py-3 rounded-lg border border-input bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 resize-none leading-relaxed placeholder:text-muted-foreground/40 transition-all" />
+              className="w-full px-3.5 py-3 rounded-xl border border-input bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 resize-none leading-relaxed placeholder:text-muted-foreground/40 transition-all" />
           </div>
 
           {/* Subtasks */}
@@ -349,7 +462,7 @@ const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, on
             <label className="block text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
               Subtasks{subtasks.items.length > 0 ? ` · ${subtasks.doneCount}/${subtasks.items.length}` : ""}
             </label>
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
               {subtasks.items.length > 0 && (
                 <div className="divide-y divide-border/50">
                   {subtasks.items.map(sub => (
@@ -377,52 +490,120 @@ const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, on
             </div>
           </div>
 
-          {/* Pomodoro Timer */}
+          {/* ── Pomodoro Timer ─────────────────────────────── */}
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Focus Timer · 25 min</label>
-            <div className="rounded-xl border border-border bg-card p-4">
-              <div className="flex items-center gap-5">
-                <div className="relative shrink-0">
-                  <TimerRing remaining={isTimerTask ? rem : POMODORO} />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={`text-[13px] font-black tabular-nums ${isTimerTask && timer.running ? "text-primary" : "text-foreground"}`}>
-                      {fmtTime(isTimerTask ? rem : POMODORO)}
-                    </span>
+            <div className="flex items-center justify-between mb-2.5">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                Focus Timer
+              </label>
+              {pomoCount > 0 && (
+                <span className="text-[11px] font-semibold text-primary flex items-center gap-1">
+                  <Flame className="w-3.5 h-3.5 text-orange-400" />{pomoCount} session{pomoCount !== 1 ? "s" : ""} completed
+                </span>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              {/* Mode tabs */}
+              <div className="flex border-b border-border/50">
+                {(["work", "short", "long"] as TimerMode[]).map(m => {
+                  const labels: Record<TimerMode, string> = { work: "Focus", short: "Short Break", long: "Long Break" };
+                  const isActive = isTimerTask && timer.mode === m;
+                  return (
+                    <button key={m} disabled={isTimerTask && timer.running}
+                      onClick={() => {
+                        if (!isTimerTask || !timer.running) {
+                          if (!isTimerTask) { /* handled by start */ }
+                        }
+                      }}
+                      className={`flex-1 py-2 text-[11px] font-semibold transition-all
+                        ${isActive ? `bg-muted/50 ${MODE_COLORS[m]}` : "text-muted-foreground/50 hover:text-muted-foreground"}`}>
+                      {labels[m]}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="p-4">
+                <div className="flex items-center gap-4">
+                  {/* Ring */}
+                  <div className="relative shrink-0">
+                    <TimerRing remaining={isTimerTask ? rem : currentTotal} total={currentTotal} mode={currentMode} />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className={`text-[13px] font-black tabular-nums ${isTimerTask && timer.running ? MODE_COLORS[timer.mode] : "text-foreground"}`}>
+                        {fmtTime(isTimerTask ? rem : currentTotal)}
+                      </span>
+                      {isTimerTask && (
+                        <span className={`text-[9px] font-bold uppercase tracking-wide mt-0.5 ${MODE_COLORS[timer.mode]}`}>
+                          {timer.mode === "work" ? "Focus" : timer.mode === "short" ? "Break" : "Rest"}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex-1 space-y-2.5">
-                  {isTimerTask ? (
-                    <>
-                      <p className="text-xs text-muted-foreground">{timer.running ? "Focus session running" : "Session paused"}</p>
+
+                  <div className="flex-1 space-y-2.5">
+                    {/* Cycle dots */}
+                    {isTimerTask && (
+                      <div className="flex items-center gap-2">
+                        <PomoDots cycleCount={timer.cycleCount} />
+                        <span className="text-[10px] text-muted-foreground">{timer.cycleCount}/4 before long break</span>
+                      </div>
+                    )}
+
+                    {/* Status */}
+                    <p className={`text-xs ${isTimerTask ? MODE_COLORS[timer.mode] : "text-muted-foreground"}`}>
+                      {!isTimerTask
+                        ? "Start a focused work session"
+                        : timer.mode === "work"
+                          ? timer.running ? "Focusing — you got this!" : "Session paused"
+                          : timer.running
+                            ? timer.mode === "short" ? "Short break — breathe!" : "Long break — well deserved!"
+                            : "Break ready — take a rest"}
+                    </p>
+
+                    {/* Controls */}
+                    {isTimerTask ? (
                       <div className="flex gap-2">
                         <button onClick={timer.running ? timer.pause : timer.resume}
                           className={`flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold transition-all active:scale-95
-                            ${timer.running ? "bg-amber-500/12 text-amber-500 hover:bg-amber-500/18" : "bg-primary/12 text-primary hover:bg-primary/18"}`}>
+                            ${timer.running
+                              ? "bg-amber-500/12 text-amber-500 hover:bg-amber-500/18"
+                              : "bg-primary/12 text-primary hover:bg-primary/18"}`}>
                           {timer.running ? <><Pause className="w-3 h-3" />Pause</> : <><Play className="w-3 h-3" />Resume</>}
                         </button>
+                        {timer.mode !== "work" && (
+                          <button onClick={timer.skipBreak}
+                            className="flex items-center justify-center gap-1 h-8 px-3 rounded-lg bg-muted text-muted-foreground text-xs font-semibold hover:text-foreground transition-all active:scale-95">
+                            Skip
+                          </button>
+                        )}
                         <button onClick={timer.reset}
                           className="w-8 h-8 rounded-lg flex items-center justify-center bg-muted hover:bg-muted/80 text-muted-foreground transition-all active:scale-95">
                           <RotateCcw className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-xs text-muted-foreground">Start a 25-minute focused session</p>
-                      <button onClick={() => timer.start(task.id)}
+                    ) : (
+                      <button onClick={() => timer.start(task.id, "work")}
                         className="w-full flex items-center justify-center gap-2 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all active:scale-[0.98] shadow-sm shadow-primary/20">
                         <Play className="w-3 h-3" />Start Focus
                       </button>
-                    </>
-                  )}
+                    )}
+                  </div>
                 </div>
+
+                {/* Done banner */}
+                {isTimerTask && rem === 0 && (
+                  <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
+                    <p className={`text-sm font-semibold ${timer.mode === "work" ? "text-primary" : "text-emerald-500"}`}>
+                      {timer.mode === "work" ? "⏱ Session done! Time for a break." : "☕ Break over — ready to focus?"}
+                    </p>
+                    <button onClick={() => timer.start(task.id, timer.mode === "work" ? (timer.cycleCount % 4 === 0 ? "long" : "short") : "work")}
+                      className="text-xs font-bold text-primary hover:underline">
+                      {timer.mode === "work" ? "Take break" : "Start focus"}
+                    </button>
+                  </div>
+                )}
               </div>
-              {isTimerTask && rem === 0 && (
-                <div className="mt-3 pt-3 border-t border-border/50 text-center">
-                  <p className="text-emerald-500 font-semibold text-sm">Session complete — great work.</p>
-                  <button onClick={timer.reset} className="mt-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">Reset</button>
-                </div>
-              )}
             </div>
           </div>
 
@@ -438,7 +619,7 @@ const TaskDetail = memo(function TaskDetail({ task, timer, onClose, onUpdate, on
 });
 
 /* ─────────────────────────────────────────────────────────
-   TASK CARD
+   TASK CARD  — Notion-style
 ───────────────────────────────────────────────────────── */
 interface CardProps {
   task: any;
@@ -450,6 +631,7 @@ interface CardProps {
   onToggle: (id: number, completed: boolean) => void;
   onDelete: (id: number) => void;
 }
+
 const TaskCard = memo(function TaskCard({ task, isSelected, taskTime, todayStr, timer, onSelect, onToggle, onDelete }: CardProps) {
   const p: Priority = (task.priority as Priority) || "medium";
   const pc = P_CFG[p];
@@ -458,64 +640,75 @@ const TaskCard = memo(function TaskCard({ task, isSelected, taskTime, todayStr, 
   const tomStr     = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split("T")[0];
   const isTomorrow = !task.completed && task.dueDate && task.dueDate === tomStr;
   const isTimerOn  = timer.taskId === task.id;
-  const timeSuffix = taskTime ? ` · ${fmt12(taskTime)}` : "";
-  const dueLabel   = (() => {
+
+  const dateChip = (() => {
     if (!task.dueDate) return null;
-    if (isOverdue)  return { text: `Overdue · ${format(parseISO(task.dueDate), "MMM d")}${timeSuffix}`, color: "text-rose-500" };
-    if (isDueToday) return { text: `Today${timeSuffix}`,                                                 color: "text-amber-500" };
-    if (isTomorrow) return { text: `Tomorrow${timeSuffix}`,                                              color: "text-blue-400"  };
-    return           { text: `${format(parseISO(task.dueDate), "MMM d")}${timeSuffix}`,                 color: "text-muted-foreground/65" };
+    const time = taskTime ? ` ${fmt12(taskTime)}` : "";
+    if (isOverdue)  return { text: `Overdue${time}`,                                    cls: "bg-rose-500/10 text-rose-500 border-rose-500/20" };
+    if (isDueToday) return { text: `Today${time}`,                                       cls: "bg-amber-500/10 text-amber-500 border-amber-500/20" };
+    if (isTomorrow) return { text: `Tomorrow${time}`,                                    cls: "bg-blue-500/10 text-blue-400 border-blue-400/20" };
+    return           { text: `${format(parseISO(task.dueDate), "MMM d")}${time}`,       cls: "bg-muted text-muted-foreground border-border" };
   })();
 
   return (
     <div onClick={onSelect}
-      className={`group flex items-center gap-3 px-4 py-3.5 rounded-xl border transition-all duration-150 cursor-pointer
-        ${isSelected  ? "border-primary/25 bg-primary/5"
-        : isOverdue   ? "border-rose-500/15 bg-rose-500/3 hover:border-rose-500/25"
-        : "border-border bg-card hover:border-border/80 hover:bg-muted/15"}`}>
+      className={`group flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-150 cursor-pointer
+        ${isSelected  ? "border-primary/30 bg-primary/5 shadow-sm shadow-primary/5"
+        : isOverdue   ? "border-rose-500/15 bg-rose-500/3 hover:bg-rose-500/5 hover:border-rose-500/25"
+        : "border-border/60 bg-card hover:border-border hover:bg-muted/20"}`}>
+
+      {/* Checkbox */}
       <button onClick={e => { e.stopPropagation(); onToggle(task.id, task.completed); }}
         className="shrink-0 hover:scale-110 active:scale-95 transition-transform">
         {task.completed
-          ? <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-          : <Circle className={`w-5 h-5 ${pc.color} opacity-35 hover:opacity-100 transition-opacity`} />}
+          ? <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />
+          : <Circle className={`w-4.5 h-4.5 ${pc.color} opacity-30 hover:opacity-100 transition-opacity`} />}
       </button>
+
+      {/* Content */}
       <div className="flex-1 min-w-0">
-        <p className={`text-[13px] font-medium leading-snug ${task.completed ? "line-through text-muted-foreground/45" : "text-foreground"}`}>
+        <p className={`text-[13.5px] font-medium leading-snug ${task.completed ? "line-through text-muted-foreground/40" : "text-foreground"}`}>
           {task.title}
         </p>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {dueLabel && (
-            <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${dueLabel.color}`}>
-              <CalendarDays className="w-3 h-3 shrink-0" />{dueLabel.text}
-            </span>
-          )}
-          {p !== "medium" && !task.completed && (
-            <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${pc.color} opacity-75`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${pc.dot}`} />{pc.label}
-            </span>
-          )}
-          {isTimerOn && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
-              <Timer className="w-3 h-3" />{timer.running ? "Focusing" : "Paused"}
-            </span>
-          )}
-        </div>
+        {/* Property chips */}
+        {!task.completed && (
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            {dateChip && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-semibold ${dateChip.cls}`}>
+                <CalendarDays className="w-2.5 h-2.5" />{dateChip.text}
+              </span>
+            )}
+            {p !== "medium" && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-semibold ${pc.chip}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${pc.dot}`} />{pc.label}
+              </span>
+            )}
+            {isTimerOn && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-primary/20 bg-primary/8 text-[10px] font-semibold text-primary">
+                <Timer className="w-2.5 h-2.5" />{timer.running ? "Focusing" : "Paused"}
+              </span>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Actions */}
       <div className="flex items-center gap-1 shrink-0">
         <button onClick={e => { e.stopPropagation(); onDelete(task.id); }}
           className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/8 transition-all">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
-        <ChevronRight className={`w-4 h-4 transition-all ${isSelected ? "text-primary" : "text-border group-hover:text-muted-foreground/50"}`} />
+        <ChevronRight className={`w-4 h-4 transition-all ${isSelected ? "text-primary" : "text-border/60 group-hover:text-muted-foreground/50"}`} />
       </div>
     </div>
   );
 });
 
 /* ─────────────────────────────────────────────────────────
-   ADD TASK FORM
+   ADD TASK FORM — Notion-style inline
 ───────────────────────────────────────────────────────── */
 interface CreateData { title: string; priority: Priority; dueDate?: string; dueTime?: string; }
+
 function AddTaskForm({ onCreate }: { onCreate: (d: CreateData) => void }) {
   const [open, setOpen]         = useState(false);
   const [title, setTitle]       = useState("");
@@ -524,6 +717,7 @@ function AddTaskForm({ onCreate }: { onCreate: (d: CreateData) => void }) {
   const [dueTime, setDueTime]   = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const today    = todayKey();
+  const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split("T")[0];
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -532,15 +726,20 @@ function AddTaskForm({ onCreate }: { onCreate: (d: CreateData) => void }) {
     setTitle(""); setDueDate(""); setDueTime(""); setPriority("medium"); setOpen(false);
   };
 
+  const quickDate = (d: string) => { setDueDate(d === dueDate ? "" : d); if (!d) setDueTime(""); };
+
   return (
-    <div className={`rounded-xl border bg-card transition-all duration-200 ${open ? "border-primary/30 shadow-sm shadow-primary/8" : "border-border hover:border-border/60"}`}>
+    <div className={`rounded-xl border bg-card transition-all duration-200 ${open ? "border-primary/25 shadow-sm shadow-primary/5" : "border-dashed border-border/60 hover:border-border"}`}>
       <form onSubmit={submit}>
+        {/* Input row */}
         <div className="flex items-center gap-3 px-4 py-3">
-          <div className="w-5 h-5 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center shrink-0">
-            <Plus className="w-2.5 h-2.5 text-muted-foreground/35" />
+          <div className="w-4 h-4 rounded-sm border-2 border-dashed border-muted-foreground/25 flex items-center justify-center shrink-0">
+            <Plus className="w-2.5 h-2.5 text-muted-foreground/30" />
           </div>
-          <input ref={inputRef} value={title} onChange={e => setTitle(e.target.value)} onFocus={() => setOpen(true)}
-            placeholder="Add a task…" className="flex-1 bg-transparent text-sm placeholder:text-muted-foreground/35 focus:outline-none" />
+          <input ref={inputRef} value={title} onChange={e => setTitle(e.target.value)}
+            onFocus={() => setOpen(true)}
+            onKeyDown={e => { if (e.key === "Escape") { setOpen(false); setTitle(""); (e.target as HTMLInputElement).blur(); } }}
+            placeholder="New task…" className="flex-1 bg-transparent text-[13.5px] placeholder:text-muted-foreground/35 focus:outline-none" />
           {title.trim() && (
             <button type="submit"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all active:scale-95 shrink-0">
@@ -548,41 +747,78 @@ function AddTaskForm({ onCreate }: { onCreate: (d: CreateData) => void }) {
             </button>
           )}
         </div>
+
+        {/* Expanded row */}
         {open && (
-          <div className="px-4 py-2.5 border-t border-border/50 bg-muted/15 space-y-2.5">
-            <div className="flex items-center gap-2">
-              <Flag className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-              <div className="flex gap-1.5">
-                {(["high", "medium", "low"] as Priority[]).map(p => {
-                  const cfg = P_CFG[p];
-                  return (
-                    <button key={p} type="button" onClick={() => setPriority(p)}
-                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all
-                        ${priority === p ? `${cfg.ring} ${cfg.dot}` : "border-border bg-muted/50 hover:border-muted-foreground/40"}`}>
-                      {priority === p && <Check className="w-2.5 h-2.5 text-white" />}
-                    </button>
-                  );
-                })}
-                <span className="text-xs text-muted-foreground self-center ml-1">{P_CFG[priority].label}</span>
-              </div>
-            </div>
+          <div className="px-4 pb-3 pt-0 space-y-3">
+            <div className="h-px bg-border/40" />
+
+            {/* Date row */}
             <div className="flex items-center gap-2 flex-wrap">
-              <CalendarDays className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
-              <input type="date" value={dueDate} min={today}
-                onChange={e => { setDueDate(e.target.value); if (!e.target.value) setDueTime(""); }}
-                className="h-7 text-xs bg-transparent focus:outline-none text-muted-foreground w-28" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 w-10">📅 Due</span>
+              {/* Quick picks */}
+              <button type="button" onClick={() => quickDate(today)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all
+                  ${dueDate === today ? "bg-amber-500/12 text-amber-500 border-amber-500/25" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                Today
+              </button>
+              <button type="button" onClick={() => quickDate(tomorrow)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all
+                  ${dueDate === tomorrow ? "bg-blue-500/12 text-blue-400 border-blue-400/25" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                Tomorrow
+              </button>
+              {/* Custom date */}
+              <div className="relative">
+                <input type="date" value={dueDate} min={today}
+                  onChange={e => { setDueDate(e.target.value); if (!e.target.value) setDueTime(""); }}
+                  className="h-7 px-2 rounded-lg border border-border bg-transparent text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/25 text-muted-foreground w-28 cursor-pointer" />
+              </div>
+              {/* Time */}
               {dueDate && (
-                <>
-                  <Clock className="w-3.5 h-3.5 text-muted-foreground/60 shrink-0" />
+                <div className="relative flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-muted-foreground/50" />
                   <input type="time" value={dueTime} onChange={e => setDueTime(e.target.value)}
-                    className="h-7 text-xs bg-transparent focus:outline-none text-muted-foreground w-20" />
-                </>
+                    className="h-7 px-2 rounded-lg border border-border bg-transparent text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/25 text-muted-foreground w-24 cursor-pointer" />
+                </div>
               )}
+              {dueDate && (
+                <button type="button" onClick={() => { setDueDate(""); setDueTime(""); }}
+                  className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Priority row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 w-10">🚩 Pri</span>
+              {(["high", "medium", "low"] as Priority[]).map(p => {
+                const cfg = P_CFG[p];
+                return (
+                  <button key={p} type="button" onClick={() => setPriority(p)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all
+                      ${priority === p ? `${cfg.bg} ${cfg.color} border-current/30` : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />{cfg.label}
+                  </button>
+                );
+              })}
+
               <button type="button" onClick={() => { setOpen(false); setTitle(""); }}
-                className="ml-auto text-muted-foreground/40 hover:text-foreground transition-colors">
+                className="ml-auto text-muted-foreground/40 hover:text-muted-foreground transition-colors">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
+
+            {/* Preview */}
+            {(dueDate || dueTime) && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/40">
+                <CalendarClock className="w-3 h-3 text-primary/70" />
+                <span className="text-[11px] text-muted-foreground">
+                  Due <strong className="text-foreground">{dueDate === today ? "today" : dueDate === tomorrow ? "tomorrow" : format(parseISO(dueDate), "MMM d")}</strong>
+                  {dueTime && <> at <strong className="text-foreground">{fmt12(dueTime)}</strong></>}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </form>
@@ -591,7 +827,7 @@ function AddTaskForm({ onCreate }: { onCreate: (d: CreateData) => void }) {
 }
 
 /* ─────────────────────────────────────────────────────────
-   TASKS TAB  (receives lifted state as props)
+   TASKS TAB
 ───────────────────────────────────────────────────────── */
 interface TasksTabProps {
   tasks: any[];
@@ -603,11 +839,30 @@ interface TasksTabProps {
   onCreate: (data: CreateData) => void;
 }
 
+type Group = { key: string; label: string; icon: React.ReactNode; tasks: any[]; color: string; empty?: boolean };
+
+function groupTasks(tasks: any[], todayStr: string): Group[] {
+  const pending   = tasks.filter(t => !t.completed);
+  const done      = tasks.filter(t =>  t.completed);
+  const overdue   = pending.filter(t => t.dueDate && t.dueDate < todayStr);
+  const today     = pending.filter(t => t.dueDate === todayStr);
+  const upcoming  = pending.filter(t => t.dueDate && t.dueDate > todayStr);
+  const noDate    = pending.filter(t => !t.dueDate);
+
+  const groups: Group[] = [];
+  if (overdue.length)  groups.push({ key: "overdue",  label: "Overdue",   icon: <AlertCircle  className="w-3.5 h-3.5" />, tasks: overdue,  color: "text-rose-500"  });
+  if (today.length)    groups.push({ key: "today",    label: "Today",     icon: <CalendarDays className="w-3.5 h-3.5" />, tasks: today,    color: "text-amber-500" });
+  if (upcoming.length) groups.push({ key: "upcoming", label: "Upcoming",  icon: <Hourglass    className="w-3.5 h-3.5" />, tasks: upcoming, color: "text-blue-400"  });
+  if (noDate.length)   groups.push({ key: "nodate",   label: "No Date",   icon: <Circle       className="w-3.5 h-3.5" />, tasks: noDate,   color: "text-muted-foreground" });
+  if (done.length)     groups.push({ key: "done",     label: "Completed", icon: <CheckCircle2 className="w-3.5 h-3.5" />, tasks: done,     color: "text-emerald-500" });
+  return groups;
+}
+
 function TasksTab({ tasks, isLoading, timer, onToggle, onUpdate, onDelete, onCreate }: TasksTabProps) {
   const isMobile = useIsMobile();
-  const [filter, setFilter]       = useState<TaskFilter>("all");
+  const [filter, setFilter]     = useState<TaskFilter>("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [timesVer, setTimesVer]   = useState(0);
+  const [timesVer, setTimesVer] = useState(0);
   const todayStr = todayKey();
 
   const filtered = useMemo(() => {
@@ -620,8 +875,8 @@ function TasksTab({ tasks, isLoading, timer, onToggle, onUpdate, onDelete, onCre
   const pending      = useMemo(() => filtered.filter(t => !t.completed), [filtered]);
   const done         = useMemo(() => filtered.filter(t =>  t.completed), [filtered]);
   const overdueCount = useMemo(() => pending.filter(t => t.dueDate && t.dueDate < todayStr).length, [pending, todayStr]);
-
-  const selected = useMemo(() => tasks.find(t => t.id === selectedId) ?? null, [tasks, selectedId]);
+  const selected     = useMemo(() => tasks.find(t => t.id === selectedId) ?? null, [tasks, selectedId]);
+  const groups       = useMemo(() => filter === "all" ? groupTasks(tasks, todayStr) : null, [tasks, filter, todayStr]);
 
   const handleTimeChange = useCallback(() => setTimesVer(v => v + 1), []);
   const handleDelete = useCallback((id: number) => {
@@ -629,16 +884,25 @@ function TasksTab({ tasks, isLoading, timer, onToggle, onUpdate, onDelete, onCre
     onDelete(id);
   }, [selectedId, onDelete]);
 
+  const renderCard = (task: any) => (
+    <TaskCard key={`${task.id}-${timesVer}`} task={task} isSelected={selectedId === task.id}
+      todayStr={todayStr} timer={timer} taskTime={getTaskTime(task.id)}
+      onSelect={() => setSelectedId(selectedId === task.id ? null : task.id)}
+      onToggle={onToggle} onDelete={handleDelete} />
+  );
+
   const ListPane = (
     <div className="h-full flex flex-col">
-      {/* List header */}
+      {/* Header */}
       <div className="px-5 sm:px-6 pt-5 pb-4 shrink-0">
         <div className="flex items-center justify-between gap-3 mb-0.5">
-          <h2 className="text-xl font-bold tracking-tight">All Tasks</h2>
+          <h2 className="text-xl font-bold tracking-tight">Tasks</h2>
           {timer.taskId && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-semibold">
-              <Timer className="w-3 h-3" />
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold
+              ${timer.mode === "work" ? "bg-primary/10 text-primary" : timer.mode === "short" ? "bg-emerald-500/10 text-emerald-500" : "bg-violet-500/10 text-violet-400"}`}>
+              {timer.mode === "work" ? <Timer className="w-3 h-3" /> : <Coffee className="w-3 h-3" />}
               <span className="tabular-nums">{fmtTime(timer.getRem())}</span>
+              <span>{timer.mode === "work" ? "" : "break"}</span>
             </div>
           )}
         </div>
@@ -647,23 +911,25 @@ function TasksTab({ tasks, isLoading, timer, onToggle, onUpdate, onDelete, onCre
           {overdueCount > 0 && <span className="text-rose-500 font-medium"> · {overdueCount} overdue</span>}
           {done.length > 0   && <span className="text-muted-foreground/50"> · {done.length} done</span>}
         </p>
-        <div className="flex gap-1.5 mt-3">
+        {/* Filters */}
+        <div className="flex gap-1.5 mt-3 flex-wrap">
           {FILTERS.map(([v, l]) => (
             <button key={v} onClick={() => setFilter(v)}
-              className={`px-3 py-1.5 rounded-full text-[12px] font-semibold transition-all
+              className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all
                 ${filter === v
                   ? v === "high" ? "bg-rose-500 text-white shadow-sm shadow-rose-500/20" : "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                  : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+                  : "bg-muted/60 text-muted-foreground hover:text-foreground"}`}>
               {l}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Task list */}
+      {/* List */}
       <ScrollArea className="flex-1 px-5 sm:px-6">
-        <div className="pb-8 space-y-2">
+        <div className="pb-10 space-y-2">
           <AddTaskForm onCreate={onCreate} />
+
           {isLoading ? (
             <div className="space-y-2 mt-2">
               {[...Array(4)].map((_, i) => <div key={i} className="h-14 rounded-xl shimmer" style={{ animationDelay: `${i * 70}ms` }} />)}
@@ -678,34 +944,41 @@ function TasksTab({ tasks, isLoading, timer, onToggle, onUpdate, onDelete, onCre
               </p>
               <p className="text-xs mt-1 text-muted-foreground/50">Add a task above to get started</p>
             </div>
+          ) : filter === "all" && groups ? (
+            /* Notion-style grouped view */
+            <div className="space-y-4 mt-2">
+              {groups.map(g => (
+                <div key={g.key}>
+                  <div className={`flex items-center gap-1.5 mb-2 ${g.color}`}>
+                    {g.icon}
+                    <span className="text-[11px] font-bold uppercase tracking-widest">{g.label}</span>
+                    <span className="text-[10px] opacity-60">· {g.tasks.length}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {g.key === "done"
+                      ? <div className="space-y-1 opacity-55">{g.tasks.map(renderCard)}</div>
+                      : g.tasks.map(renderCard)}
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
-            <div className="space-y-1.5 mt-1">
+            /* Filtered flat view */
+            <div className="space-y-1.5 mt-2">
               {pending.length > 0 && (
                 <>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 py-1">Pending · {pending.length}</p>
-                  {pending.map(task => (
-                    <TaskCard key={`${task.id}-${timesVer}`} task={task} isSelected={selectedId === task.id} todayStr={todayStr} timer={timer}
-                      taskTime={getTaskTime(task.id)}
-                      onSelect={() => setSelectedId(selectedId === task.id ? null : task.id)}
-                      onToggle={onToggle} onDelete={handleDelete} />
-                  ))}
+                  {pending.map(renderCard)}
                 </>
               )}
               {done.length > 0 && (
                 <>
                   <div className="flex items-center gap-2 pt-3 pb-1">
                     <div className="h-px flex-1 bg-border/40" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/35 px-2">Completed · {done.length}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/35 px-2">Done · {done.length}</span>
                     <div className="h-px flex-1 bg-border/40" />
                   </div>
-                  <div className="space-y-1 opacity-55">
-                    {done.map(task => (
-                      <TaskCard key={`${task.id}-${timesVer}`} task={task} isSelected={selectedId === task.id} todayStr={todayStr} timer={timer}
-                        taskTime={getTaskTime(task.id)}
-                        onSelect={() => setSelectedId(selectedId === task.id ? null : task.id)}
-                        onToggle={onToggle} onDelete={handleDelete} />
-                    ))}
-                  </div>
+                  <div className="space-y-1 opacity-55">{done.map(renderCard)}</div>
                 </>
               )}
             </div>
@@ -753,162 +1026,45 @@ function LiveClock({ now }: { now: Date }) {
             <div className="flex flex-col items-center justify-center w-14 h-14 rounded-xl bg-card border border-border shadow-md">
               <span className="text-2xl font-black tabular-nums">{val}</span>
             </div>
-            {i < 2 && <span className="text-xl font-black text-muted-foreground/50">:</span>}
+            {i < 2 && <span className="text-xl font-black text-muted-foreground/30 mb-1">:</span>}
           </span>
         ))}
-        <span className="ml-1 text-sm font-bold text-muted-foreground self-end pb-1">{ampm}</span>
-      </div>
-      <p className="text-xs text-muted-foreground/60">{format(now, "EEEE, MMMM d, yyyy")}</p>
-    </div>
-  );
-}
-
-function TodaysFocus() {
-  const key = `argus_focus_${todayKey()}`;
-  const [items, setItems] = useState<FocusItem[]>(() => ls(key, []));
-  const [input, setInput] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const save = (next: FocusItem[]) => { setItems(next); lsSave(key, next); };
-  const add  = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
-    save([...items, { id: crypto.randomUUID(), text: input.trim(), done: false }]);
-    setInput(""); inputRef.current?.focus();
-  };
-
-  return (
-    <div className="flex flex-col gap-2 h-full">
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Today's Focus</p>
-        {items.length > 0 && <span className="text-[10px] font-semibold text-muted-foreground/60">{items.filter(f => f.done).length}/{items.length}</span>}
-      </div>
-      <div className="flex-1 space-y-1">
-        {items.length === 0 && <p className="text-xs text-muted-foreground/40 italic py-1">What are you focusing on today?</p>}
-        {items.map(item => (
-          <div key={item.id} className="flex items-center gap-2.5 group">
-            <button onClick={() => save(items.map(f => f.id === item.id ? { ...f, done: !f.done } : f))} className="shrink-0">
-              {item.done ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <Circle className="w-4 h-4 text-muted-foreground/30 hover:text-primary transition-colors" />}
-            </button>
-            <span className={`flex-1 text-sm leading-snug ${item.done ? "line-through text-muted-foreground/40" : ""}`}>{item.text}</span>
-            <button onClick={() => save(items.filter(f => f.id !== item.id))}
-              className="opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center text-muted-foreground/40 hover:text-destructive transition-all">
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        ))}
-      </div>
-      <form onSubmit={add} className="flex items-center gap-2 pt-1 border-t border-border/40">
-        <Plus className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0" />
-        <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)} placeholder="Add focus item…"
-          className="flex-1 text-xs bg-transparent focus:outline-none placeholder:text-muted-foreground/30" />
-        {input.trim() && <button type="submit" className="text-[11px] font-semibold text-primary">Add</button>}
-      </form>
-    </div>
-  );
-}
-
-function MissionSection() {
-  const [goals, setGoals]     = useState<Goal[]>(() => ls(GOALS_KEY, []));
-  const [input, setInput]     = useState("");
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editText, setEditText] = useState("");
-
-  const save   = (next: Goal[]) => { setGoals(next); lsSave(GOALS_KEY, next); };
-  const add    = (e: React.FormEvent) => { e.preventDefault(); if (!input.trim()) return; save([...goals, { id: crypto.randomUUID(), text: input.trim() }]); setInput(""); };
-  const commit = () => { if (editing) save(goals.map(g => g.id === editing ? { ...g, text: editText.trim() || g.text } : g)); setEditing(null); };
-
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
-        <Target className="w-4 h-4 text-primary" />
-        <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">The Mission</h2>
-      </div>
-      {goals.length === 0 && <p className="text-xs text-muted-foreground/40 italic mb-3">Define what matters — add your goals below</p>}
-      {goals.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          {goals.map(g => (
-            <div key={g.id} className="group flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-muted/30 hover:border-primary/25 transition-all">
-              {editing === g.id
-                ? <input value={editText} onChange={e => setEditText(e.target.value)} onBlur={commit}
-                    onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(null); }}
-                    autoFocus className="text-xs bg-transparent focus:outline-none min-w-[80px]" />
-                : <span className="text-xs font-medium">{g.text}</span>}
-              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => { setEditing(g.id); setEditText(g.text); }} className="w-4 h-4 flex items-center justify-center text-muted-foreground/50 hover:text-primary"><Pencil className="w-2.5 h-2.5" /></button>
-                <button onClick={() => save(goals.filter(x => x.id !== g.id))} className="w-4 h-4 flex items-center justify-center text-muted-foreground/50 hover:text-destructive"><X className="w-2.5 h-2.5" /></button>
-              </div>
-            </div>
-          ))}
+        <div className="ml-1 flex flex-col justify-end pb-1">
+          <span className="text-xs font-bold text-muted-foreground">{ampm}</span>
         </div>
-      )}
-      <form onSubmit={add} className="flex items-center gap-2">
-        <input value={input} onChange={e => setInput(e.target.value)} placeholder="Add a mission goal…"
-          className="flex-1 h-8 px-3 rounded-lg border border-border bg-muted/20 text-xs focus:outline-none focus:ring-2 focus:ring-primary/25 placeholder:text-muted-foreground/35 transition-all" />
-        {input.trim() && (
-          <button type="submit" className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all active:scale-95">Add</button>
-        )}
-      </form>
+      </div>
+      <p className="text-xs text-muted-foreground/50">{now.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}</p>
     </div>
   );
 }
 
-/* ─────────────────────────────────────────────────────────
-   AI WEEKLY REVIEW
-───────────────────────────────────────────────────────── */
 function WeeklyReview({ tasks }: { tasks: any[] }) {
-  const [review, setReview]   = useState<string>(() => ls("argus_weekly_review", ""));
-  const [savedAt, setSavedAt] = useState<string>(() => ls("argus_weekly_review_date", ""));
+  const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const generate = async () => {
-    setLoading(true); setReview("");
-    const today    = todayKey();
-    const habits: Habit[]     = ls(HABITS_KEY, []);
-    const goals: Goal[]       = ls(GOALS_KEY, []);
-    const focus: FocusItem[]  = ls(`argus_focus_${today}`, []);
-    const days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() - i); return d.toISOString().split("T")[0];
+  const run = async () => {
+    setLoading(true); setResult("");
+    const r = await fetch(`${BASE}/api/tracker/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tasks }),
     });
-    const habitLines = habits.map(h => {
-      const done = days.filter(d => h.completions[d]).length;
-      return `${h.emoji} ${h.name}: ${done}/7 days`;
-    }).join(", ") || "No habits tracked";
-
-    const context = [
-      `Tasks completed: ${tasks.filter(t => t.completed).length} of ${tasks.length} total`,
-      `Habits this week: ${habitLines}`,
-      `Focus items today: ${focus.filter(f => f.done).length}/${focus.length} done`,
-      `Active goals: ${goals.map(g => g.text).join(", ") || "None set"}`,
-    ].join("\n");
-
-    try {
-      const res = await fetch(`${BASE}/api/tracker/review`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context }),
-      });
-      const reader  = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buf = ""; let full = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n"); buf = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const d = JSON.parse(line.slice(6));
-            if (d.content) { full += d.content; setReview(r => r + d.content); }
-          } catch { /* noop */ }
+    if (!r.body) { setLoading(false); return; }
+    const reader = r.body.getReader(); const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\n\n");
+      buf = parts.pop() ?? "";
+      for (const part of parts) {
+        if (part.startsWith("data: ")) {
+          const d = part.slice(6);
+          if (d === "[DONE]") break;
+          try { setResult(p => (p ?? "") + JSON.parse(d)); } catch { /* noop */ }
         }
       }
-      lsSave("argus_weekly_review", full);
-      lsSave("argus_weekly_review_date", new Date().toLocaleDateString());
-      setSavedAt(new Date().toLocaleDateString());
-    } catch {
-      setReview("Failed to generate review. Please try again.");
     }
     setLoading(false);
   };
@@ -916,21 +1072,17 @@ function WeeklyReview({ tasks }: { tasks: any[] }) {
   return (
     <div className="surface p-5">
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-primary" />
-          <h2 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Weekly Review</h2>
-          {savedAt && <span className="text-[10px] text-muted-foreground/40">· {savedAt}</span>}
-        </div>
-        <button onClick={generate} disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/18 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
-          {loading
-            ? <><span className="w-3 h-3 border-2 border-primary/40 border-t-primary rounded-full animate-spin shrink-0" />Generating…</>
-            : <><Sparkles className="w-3 h-3" />Generate</>}
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-violet-400" />AI Weekly Review
+        </p>
+        <button onClick={run} disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/15 transition-all disabled:opacity-50 active:scale-95">
+          {loading ? <><Pencil className="w-3 h-3 animate-pulse" />Writing…</> : <><Sparkles className="w-3 h-3" />Generate</>}
         </button>
       </div>
-      {review
-        ? <p className="text-sm text-foreground/90 leading-relaxed">{review}</p>
-        : <p className="text-sm text-muted-foreground/50 italic">Click Generate to get an AI-powered weekly productivity review based on your tasks, habits, and focus items.</p>}
+      {result !== null && (
+        <div className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line">{result}</div>
+      )}
     </div>
   );
 }
@@ -938,106 +1090,170 @@ function WeeklyReview({ tasks }: { tasks: any[] }) {
 /* ─────────────────────────────────────────────────────────
    OVERVIEW TAB
 ───────────────────────────────────────────────────────── */
-interface OverviewProps {
+interface OverviewTabProps {
   tasks: any[];
   now: Date;
   onGoToTasks: () => void;
   onUpdate: (id: number, data: any) => void;
+  timer: ReturnType<typeof useTaskTimer>;
 }
-function OverviewTab({ tasks, now, onGoToTasks, onUpdate }: OverviewProps) {
-  const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 17 ? "Good afternoon" : "Good evening";
-  const todayStr = todayKey();
-  const todayTasks = useMemo(() => tasks.filter(t => t.dueDate === todayStr), [tasks, todayStr]);
-  const pendingToday = useMemo(() => todayTasks.filter(t => !t.completed), [todayTasks]);
+
+function OverviewTab({ tasks, now, onGoToTasks, onUpdate, timer }: OverviewTabProps) {
+  const todayStr = now.toISOString().split("T")[0];
+  const [goals, setGoals]     = useState<Goal[]>(() => ls(GOALS_KEY, []));
+  const [focus, setFocus]     = useState<FocusItem[]>(() => ls("argus_focus", []));
+  const [newGoal, setNewGoal] = useState("");
+  const [newFocus, setNewFocus] = useState("");
+  const [rem, setRem] = useState(timer.getRem());
+
+  useEffect(() => { const id = setInterval(() => setRem(timer.getRem()), 500); return () => clearInterval(id); }, [timer]);
+
+  const todayTasks   = useMemo(() => tasks.filter(t => t.dueDate === todayStr), [tasks, todayStr]);
+  const overdueTasks = useMemo(() => tasks.filter(t => !t.completed && t.dueDate && t.dueDate < todayStr), [tasks, todayStr]);
+  const pendingCount = useMemo(() => tasks.filter(t => !t.completed).length, [tasks]);
+  const doneToday    = useMemo(() => tasks.filter(t => t.completed && t.updatedAt?.startsWith(todayStr)).length, [tasks, todayStr]);
+
+  const saveGoals = (g: Goal[]) => { setGoals(g); lsSave(GOALS_KEY, g); };
+  const saveFocus = (f: FocusItem[]) => { setFocus(f); lsSave("argus_focus", f); };
 
   return (
     <ScrollArea className="h-full">
-      <div className="pb-12">
-        {/* Banner — gradient design */}
-        <div className="relative w-full h-44 overflow-hidden bg-gradient-to-br from-primary/20 via-primary/10 to-emerald-500/10">
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 select-none">
-            <div className="flex gap-3 text-4xl opacity-60">
-              <span>📋</span><span>🎯</span><span>✅</span><span>🔥</span>
-            </div>
-          </div>
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
+      <div className="px-6 py-6 pb-12 space-y-5 max-w-2xl mx-auto">
+        {/* Clock + Date */}
+        <div className="surface p-5">
+          <LiveClock now={now} />
         </div>
 
-        {/* Header */}
-        <div className="px-6 -mt-2 mb-6">
-          <h1 className="text-2xl font-black tracking-tight leading-tight">Habit &amp; Goal Tracker</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{greeting} · {format(now, "EEEE, MMMM d")}</p>
+        {/* Stats strip */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: "Pending",  val: pendingCount, color: "text-foreground",   sub: "tasks" },
+            { label: "Due Today",val: todayTasks.length, color: todayTasks.length > 0 ? "text-amber-500" : "text-foreground", sub: "tasks" },
+            { label: "Overdue",  val: overdueTasks.length, color: overdueTasks.length > 0 ? "text-rose-500" : "text-muted-foreground/40", sub: "tasks" },
+          ].map(s => (
+            <button key={s.label} onClick={onGoToTasks} className="surface p-4 text-center hover:bg-muted/30 transition-colors rounded-xl cursor-pointer">
+              <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
+              <p className="text-[11px] text-muted-foreground font-medium mt-0.5">{s.label}</p>
+            </button>
+          ))}
         </div>
 
-        <div className="px-6 space-y-4">
-          {/* Clock + Focus */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="surface p-5"><LiveClock now={now} /></div>
-            <div className="surface p-5"><TodaysFocus /></div>
-          </div>
-
-          {/* Mission */}
-          <div className="surface p-5"><MissionSection /></div>
-
-          {/* Today's Tasks preview */}
-          <div className="surface p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-primary" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Today's Tasks</span>
-                {todayTasks.length > 0 && (
-                  <span className="text-[10px] text-muted-foreground/50">{todayTasks.filter(t => t.completed).length}/{todayTasks.length} done</span>
-                )}
+        {/* Active Pomodoro bar (only when running) */}
+        {timer.taskId !== null && (
+          <div className={`surface p-4 flex items-center gap-4 border ${
+            timer.mode === "work" ? "border-primary/20 bg-primary/3" : timer.mode === "short" ? "border-emerald-500/20 bg-emerald-500/3" : "border-violet-500/20 bg-violet-500/3"
+          }`}>
+            <div className="relative shrink-0">
+              <TimerRing remaining={rem} total={MODE_DURATIONS[timer.mode]} mode={timer.mode} size={52} stroke={5} />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className={`text-[10px] font-black tabular-nums ${MODE_COLORS[timer.mode]}`}>{fmtTime(rem)}</span>
               </div>
-              <button onClick={onGoToTasks} className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors">View all →</button>
             </div>
-            {todayTasks.length === 0 ? (
-              <p className="text-xs text-muted-foreground/40 italic py-2">
-                No tasks scheduled today — <button onClick={onGoToTasks} className="text-primary underline-offset-2 hover:underline">add one</button>
+            <div className="flex-1 min-w-0">
+              <p className={`text-[11px] font-bold uppercase tracking-widest ${MODE_COLORS[timer.mode]}`}>
+                {timer.mode === "work" ? "🍅 Focus Session" : timer.mode === "short" ? "☕ Short Break" : "🌿 Long Break"}
               </p>
-            ) : (
-              <div className="space-y-1">
-                {pendingToday.slice(0, 4).map(t => (
-                  <div key={t.id} onClick={() => onUpdate(t.id, { completed: true })}
-                    className="flex items-center gap-2.5 group px-1 py-1.5 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer">
-                    <Circle className="w-4 h-4 text-muted-foreground/30 group-hover:text-emerald-500 transition-colors shrink-0" />
-                    <span className="flex-1 text-[13px] leading-snug">{t.title}</span>
-                    {t.priority === "high" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />}
-                  </div>
-                ))}
-                {todayTasks.filter(t => t.completed).slice(0, 2).map(t => (
-                  <div key={t.id} className="flex items-center gap-2.5 px-1 py-1.5 opacity-45">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span className="flex-1 text-[13px] line-through text-muted-foreground/60">{t.title}</span>
-                  </div>
-                ))}
-                {todayTasks.length > 6 && (
-                  <p className="text-[11px] text-muted-foreground/50 pl-1 pt-1">
-                    +{todayTasks.length - 6} more — <button onClick={onGoToTasks} className="text-primary">view all</button>
-                  </p>
-                )}
+              <div className="flex items-center gap-2 mt-1">
+                <PomoDots cycleCount={timer.cycleCount} />
+                <span className="text-[10px] text-muted-foreground">{timer.cycleCount}/4 sessions</span>
               </div>
-            )}
-          </div>
-
-          {/* AI Weekly Review — receives tasks as prop, no extra fetch */}
-          <WeeklyReview tasks={tasks} />
-
-          {/* Quick Actions */}
-          <div className="surface p-5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Quick Actions</p>
-            <div className="flex flex-wrap gap-2">
-              {([
-                { label: "All Tasks", onClick: onGoToTasks, emoji: "✅", cls: "bg-emerald-500/8 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/14" },
-                { label: "New Chat",  href: "/chat",     emoji: "💬", cls: "bg-violet-500/8 text-violet-600 border-violet-500/20 hover:bg-violet-500/14" },
-                { label: "Research",  href: "/research",  emoji: "🔬", cls: "bg-orange-500/8 text-orange-600 border-orange-500/20 hover:bg-orange-500/14" },
-                { label: "Write Post",href: "/posts",     emoji: "✍️", cls: "bg-pink-500/8 text-pink-600 border-pink-500/20 hover:bg-pink-500/14"   },
-              ] as const).map(a => (
-                "onClick" in a && a.onClick
-                  ? <button key={a.label} onClick={a.onClick} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all active:scale-95 ${a.cls}`}><span>{a.emoji}</span>{a.label}</button>
-                  : <a key={a.label} href={"href" in a ? a.href : ""} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all active:scale-95 ${a.cls}`}><span>{a.emoji}</span>{a.label}</a>
-              ))}
             </div>
+            <div className="flex gap-1.5">
+              <button onClick={timer.running ? timer.pause : timer.resume}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-95
+                  ${timer.running ? "bg-amber-500/12 text-amber-500" : "bg-primary/12 text-primary"}`}>
+                {timer.running ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+              </button>
+              <button onClick={timer.reset}
+                className="w-8 h-8 rounded-lg flex items-center justify-center bg-muted text-muted-foreground transition-all active:scale-95">
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Goals */}
+        <div className="surface p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Target className="w-4 h-4 text-violet-400" />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Weekly Goals</p>
+          </div>
+          <div className="space-y-2 mb-3">
+            {goals.map(g => (
+              <div key={g.id} className="flex items-center gap-2 group">
+                <div className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />
+                <span className="flex-1 text-sm">{g.text}</span>
+                <button onClick={() => saveGoals(goals.filter(x => x.id !== g.id))}
+                  className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center text-muted-foreground/40 hover:text-destructive transition-all">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <form onSubmit={e => { e.preventDefault(); if (newGoal.trim()) { saveGoals([...goals, { id: crypto.randomUUID(), text: newGoal.trim() }]); setNewGoal(""); }}} className="flex gap-2">
+            <input value={newGoal} onChange={e => setNewGoal(e.target.value)} placeholder="Add a goal…"
+              className="flex-1 h-8 px-3 rounded-lg border border-border bg-muted/30 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-muted-foreground/35 transition-all" />
+            {newGoal.trim() && <button type="submit" className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all active:scale-95">Add</button>}
+          </form>
+        </div>
+
+        {/* Today's tasks */}
+        <div className="surface p-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Today's Tasks
+              {todayTasks.length > 0 && <span className="ml-1.5 text-muted-foreground/40">· {todayTasks.length}</span>}
+            </p>
+            <button onClick={onGoToTasks} className="text-[11px] text-primary font-semibold hover:underline">All tasks →</button>
+          </div>
+          {todayTasks.length === 0 ? (
+            <div className="py-8 text-center">
+              <p className="text-2xl mb-2">✅</p>
+              <p className="text-sm text-muted-foreground font-medium">Nothing due today</p>
+              <button onClick={onGoToTasks} className="mt-2 text-xs text-primary font-semibold hover:underline">Add a task</button>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {todayTasks.filter(t => !t.completed).slice(0, 5).map(t => (
+                <div key={t.id} onClick={() => onUpdate(t.id, { completed: true })}
+                  className="flex items-center gap-2.5 group px-1 py-2 rounded-lg hover:bg-muted/30 transition-colors cursor-pointer">
+                  <Circle className="w-4 h-4 text-muted-foreground/30 group-hover:text-emerald-500 transition-colors shrink-0" />
+                  <span className="flex-1 text-[13px] leading-snug">{t.title}</span>
+                  {t.priority === "high" && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />}
+                </div>
+              ))}
+              {todayTasks.filter(t => t.completed).slice(0, 2).map(t => (
+                <div key={t.id} className="flex items-center gap-2.5 px-1 py-2 opacity-40">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span className="flex-1 text-[13px] line-through text-muted-foreground/60">{t.title}</span>
+                </div>
+              ))}
+              {todayTasks.length > 7 && (
+                <p className="text-[11px] text-muted-foreground/50 pl-1 pt-1">
+                  +{todayTasks.length - 7} more — <button onClick={onGoToTasks} className="text-primary">view all</button>
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* AI Weekly Review */}
+        <WeeklyReview tasks={tasks} />
+
+        {/* Quick Actions */}
+        <div className="surface p-5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Quick Actions</p>
+          <div className="flex flex-wrap gap-2">
+            {([
+              { label: "All Tasks",  onClick: onGoToTasks, emoji: "✅", cls: "bg-emerald-500/8 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/14" },
+              { label: "New Chat",   href: "/chat",      emoji: "💬", cls: "bg-violet-500/8 text-violet-600 border-violet-500/20 hover:bg-violet-500/14" },
+              { label: "Research",   href: "/research",  emoji: "🔬", cls: "bg-orange-500/8 text-orange-600 border-orange-500/20 hover:bg-orange-500/14" },
+              { label: "Write Post", href: "/posts",     emoji: "✍️", cls: "bg-pink-500/8 text-pink-600 border-pink-500/20 hover:bg-pink-500/14" },
+            ] as const).map(a => (
+              "onClick" in a && a.onClick
+                ? <button key={a.label} onClick={a.onClick} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all active:scale-95 ${a.cls}`}><span>{a.emoji}</span>{a.label}</button>
+                : <a key={a.label} href={"href" in a ? a.href : ""} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all active:scale-95 ${a.cls}`}><span>{a.emoji}</span>{a.label}</a>
+            ))}
           </div>
         </div>
       </div>
@@ -1057,7 +1273,7 @@ function shouldRun(h: Habit, date: string): boolean {
   if (h.frequency === "daily") return true;
   const day = new Date(date + "T12:00:00").getDay();
   if (h.frequency === "weekdays") return day >= 1 && day <= 5;
-  return day === 1; // weekly = Monday
+  return day === 1;
 }
 function calcStreak(h: Habit): number {
   let s = 0; const today = todayKey(); const c = new Date();
@@ -1071,11 +1287,11 @@ function calcStreak(h: Habit): number {
 }
 
 function HabitsTab() {
-  const [habits, setHabits]   = useState<Habit[]>(() => ls(HABITS_KEY, []));
-  const [adding, setAdding]   = useState(false);
-  const [newName, setNewName] = useState("");
+  const [habits, setHabits]     = useState<Habit[]>(() => ls(HABITS_KEY, []));
+  const [adding, setAdding]     = useState(false);
+  const [newName, setNewName]   = useState("");
   const [newEmoji, setNewEmoji] = useState("🏃");
-  const [newFreq, setNewFreq] = useState<HabitFreq>("daily");
+  const [newFreq, setNewFreq]   = useState<HabitFreq>("daily");
   const today = todayKey();
   const days  = useMemo(() => weekDates(7), []);
 
@@ -1093,21 +1309,19 @@ function HabitsTab() {
     setNewName(""); setNewEmoji("🏃"); setNewFreq("daily"); setAdding(false);
   };
 
-  const totalHabits    = habits.length;
-  const doneToday      = habits.filter(h => h.completions[today] && shouldRun(h, today)).length;
+  const doneToday       = habits.filter(h => h.completions[today] && shouldRun(h, today)).length;
   const applicableToday = habits.filter(h => shouldRun(h, today)).length;
-  const bestStreak     = habits.length ? Math.max(...habits.map(calcStreak)) : 0;
+  const bestStreak      = habits.length ? Math.max(...habits.map(calcStreak)) : 0;
 
   return (
     <ScrollArea className="h-full">
       <div className="px-6 py-6 pb-12 space-y-5">
-        {/* Stats strip */}
-        {totalHabits > 0 && (
+        {habits.length > 0 && (
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: "Tracked",    val: totalHabits,                      color: "text-foreground" },
-              { label: "Done Today", val: `${doneToday}/${applicableToday}`, color: "text-emerald-500" },
-              { label: "Best Streak",val: bestStreak,                        color: "text-orange-400" },
+              { label: "Tracked",    val: habits.length,                       color: "text-foreground" },
+              { label: "Done Today", val: `${doneToday}/${applicableToday}`,   color: "text-emerald-500" },
+              { label: "Best Streak",val: bestStreak,                          color: "text-orange-400" },
             ].map(s => (
               <div key={s.label} className="surface p-4 text-center">
                 <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
@@ -1117,7 +1331,6 @@ function HabitsTab() {
           </div>
         )}
 
-        {/* Habit grid */}
         <div className="surface overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <div className="flex items-center gap-2">
@@ -1169,7 +1382,6 @@ function HabitsTab() {
             </div>
           ) : (
             <div>
-              {/* Day headers */}
               <div className="flex items-center gap-2 px-5 py-2 border-b border-border/40 bg-muted/10">
                 <div className="flex-1" />
                 <div className="flex gap-1">
@@ -1230,7 +1442,7 @@ function HabitsTab() {
 }
 
 /* ─────────────────────────────────────────────────────────
-   TAB BAR  (defined outside — no re-creation on render)
+   TAB BAR
 ───────────────────────────────────────────────────────── */
 function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   return (
@@ -1247,26 +1459,21 @@ function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 }
 
 /* ─────────────────────────────────────────────────────────
-   ROOT — single fetch, lifted state, one clock tick
+   ROOT
 ───────────────────────────────────────────────────────── */
 export default function Tracker() {
   const [tab, setTab] = useState<Tab>("overview");
 
-  // ── Single data fetch shared by all tabs ──
   const queryClient = useQueryClient();
   const { data: tasks = [], isLoading } = useListTasks({});
-  const { mutate: createTask  } = useCreateTask();
-  const { mutate: updateTask  } = useUpdateTask();
-  const { mutate: deleteTask  } = useDeleteTask();
+  const { mutate: createTask } = useCreateTask();
+  const { mutate: updateTask } = useUpdateTask();
+  const { mutate: deleteTask } = useDeleteTask();
   const inv = useCallback(() => queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() }), [queryClient]);
 
-  // ── Single clock tick for the whole page ──
-  const now = useClock();
-
-  // ── Single timer instance (persists across tab switches) ──
+  const now   = useClock();
   const timer = useTaskTimer();
 
-  // ── Stable mutation callbacks ──
   const handleCreate = useCallback((data: CreateData) => {
     const { dueTime, ...taskData } = data;
     createTask({ data: taskData }, { onSuccess: (t: any) => { if (dueTime && t?.id) saveTaskTime(t.id, dueTime); inv(); } });
@@ -1283,7 +1490,6 @@ export default function Tracker() {
 
   const goToTasks = useCallback(() => setTab("tasks"), []);
 
-  // ── Render ──
   if (tab === "tasks") {
     return (
       <div className="h-full flex flex-col bg-background">
@@ -1301,7 +1507,7 @@ export default function Tracker() {
       <TabBar tab={tab} setTab={setTab} />
       <div className="flex-1 min-h-0 overflow-hidden">
         {tab === "overview" && (
-          <OverviewTab tasks={tasks} now={now} onGoToTasks={goToTasks} onUpdate={handleUpdate} />
+          <OverviewTab tasks={tasks} now={now} onGoToTasks={goToTasks} onUpdate={handleUpdate} timer={timer} />
         )}
         {tab === "habits" && <HabitsTab />}
       </div>
