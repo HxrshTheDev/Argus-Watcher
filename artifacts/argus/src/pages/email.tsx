@@ -22,6 +22,14 @@ interface InboxEmailDetail extends InboxEmail { to: string; text: string; html: 
 interface InboxData { emails: InboxEmail[]; unread: number; configured: boolean; error?: string }
 interface ReplyTo { to: string; subject: string; originalText?: string }
 
+type TriageLabel = "action" | "fyi" | "newsletter" | "other";
+const TRIAGE_META: Record<TriageLabel, { label: string; emoji: string; color: string; accent: string }> = {
+  action:     { label: "Action",     emoji: "🔴", color: "text-orange-400 bg-orange-400/10 border-orange-400/20", accent: "rgb(251,146,60)"  },
+  fyi:        { label: "Info",       emoji: "💬", color: "text-blue-400 bg-blue-400/10 border-blue-400/20",       accent: "rgb(96,165,250)"  },
+  newsletter: { label: "Newsletter", emoji: "📰", color: "text-purple-400 bg-purple-400/10 border-purple-400/20", accent: "rgb(167,139,250)" },
+  other:      { label: "Other",      emoji: "📌", color: "text-muted-foreground bg-muted/30 border-border",        accent: "transparent"      },
+};
+
 const TONES = [
   { id: "professional", label: "Professional", emoji: "💼" },
   { id: "casual",       label: "Casual",       emoji: "😊" },
@@ -111,6 +119,18 @@ function useReply() {
   });
 }
 
+/* ── Filter chip ── */
+function FilterChip({ label, count, active, onClick, emoji }: { label: string; count: number; active: boolean; onClick: () => void; emoji?: string; }) {
+  return (
+    <button onClick={onClick}
+      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all border ${active ? "bg-primary/12 text-primary border-primary/25" : "text-muted-foreground hover:text-foreground hover:bg-muted/50 border-transparent"}`}>
+      {emoji && <span>{emoji}</span>}
+      {label}
+      <span className={`rounded-full px-1 min-w-[14px] text-center text-[9px] ${active ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>{count}</span>
+    </button>
+  );
+}
+
 /* ── Copy button ── */
 function CopyButton({ text, className = "" }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false);
@@ -123,11 +143,14 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
 }
 
 /* ── Inbox List ── */
-function InboxList({ emails, isLoading, error, selectedUid, onSelect, refreshing, onRefresh, notConfigured }: {
+function InboxList({ emails, isLoading, error, selectedUid, onSelect, refreshing, onRefresh, notConfigured, triageLabels = {}, triageLoading = false }: {
   emails: InboxEmail[]; isLoading: boolean; error?: string;
   selectedUid: number | null; onSelect: (e: InboxEmail) => void;
   refreshing: boolean; onRefresh: () => void; notConfigured: boolean;
+  triageLabels?: Record<number, TriageLabel>; triageLoading?: boolean;
 }) {
+  const [filter, setFilter] = useState<"all" | TriageLabel>("all");
+
   if (notConfigured) {
     return (
       <div className="flex flex-col items-center justify-center h-full px-5 text-center gap-3 pb-10">
@@ -167,29 +190,74 @@ function InboxList({ emails, isLoading, error, selectedUid, onSelect, refreshing
       </div>
     );
   }
+
+  /* Triage counts */
+  const counts = { action: 0, fyi: 0, newsletter: 0, other: 0 } as Record<TriageLabel, number>;
+  for (const uid in triageLabels) counts[triageLabels[Number(uid)]]++;
+  const hasTriage = Object.keys(triageLabels).length > 0;
+
+  /* Filtered list */
+  const visible = filter === "all" ? emails : emails.filter(e => triageLabels[e.uid] === filter);
+
   return (
-    <ScrollArea className="flex-1">
-      <div className="py-1.5 px-2 space-y-0.5">
-        {emails.map(email => (
-          <button key={email.uid} onClick={() => onSelect(email)}
-            className={`w-full text-left px-3 py-2.5 rounded-xl transition-all group ${selectedUid === email.uid ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50 border border-transparent"}`}>
-            <div className="flex items-start gap-2">
-              {!email.seen && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />}
-              {email.seen  && <div className="w-1.5 h-1.5 shrink-0 mt-1.5" />}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-1">
-                  <p className={`text-[13px] truncate ${!email.seen ? "font-bold" : "font-medium text-foreground/70"}`}>
-                    {email.from.name || email.from.address}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground/60 shrink-0">{fmtDate(email.date)}</p>
-                </div>
-                <p className={`text-[12px] truncate mt-0.5 ${!email.seen ? "font-semibold" : "text-muted-foreground"}`}>{email.subject}</p>
-              </div>
-            </div>
-          </button>
-        ))}
-      </div>
-    </ScrollArea>
+    <div className="flex flex-col flex-1 overflow-hidden">
+      {/* Filter chips */}
+      {(hasTriage || triageLoading) && (
+        <div className="flex items-center gap-1 px-2 pt-2 pb-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+          <FilterChip label="All" count={emails.length} active={filter === "all"} onClick={() => setFilter("all")} />
+          {(["action", "fyi", "newsletter", "other"] as TriageLabel[]).map(cat =>
+            counts[cat] > 0 ? (
+              <FilterChip key={cat} label={TRIAGE_META[cat].label} count={counts[cat]}
+                active={filter === cat} emoji={TRIAGE_META[cat].emoji} onClick={() => setFilter(cat)} />
+            ) : null
+          )}
+          {triageLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground shrink-0 ml-0.5" />}
+        </div>
+      )}
+
+      <ScrollArea className="flex-1">
+        {visible.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">
+            <p className="text-sm font-semibold">No {TRIAGE_META[filter as TriageLabel]?.label.toLowerCase()} emails</p>
+          </div>
+        ) : (
+          <div className="py-1.5 px-2 space-y-0.5">
+            {visible.map(email => {
+              const label = triageLabels[email.uid] as TriageLabel | undefined;
+              const meta = label ? TRIAGE_META[label] : null;
+              return (
+                <button key={email.uid} onClick={() => onSelect(email)}
+                  className={`relative w-full text-left px-3 py-2.5 rounded-xl transition-all group overflow-hidden ${selectedUid === email.uid ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50 border border-transparent"}`}>
+                  {/* Left accent bar */}
+                  {meta && meta.accent !== "transparent" && (
+                    <div className="absolute left-0 top-[6px] bottom-[6px] w-[3px] rounded-full" style={{ background: meta.accent }} />
+                  )}
+                  <div className="flex items-start gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${!email.seen ? "bg-primary" : ""}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className={`text-[13px] truncate ${!email.seen ? "font-bold" : "font-medium text-foreground/70"}`}>
+                          {email.from.name || email.from.address}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground/60 shrink-0">{fmtDate(email.date)}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <p className={`text-[12px] truncate flex-1 ${!email.seen ? "font-semibold" : "text-muted-foreground"}`}>{email.subject}</p>
+                        {meta && (
+                          <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full border shrink-0 ${meta.color}`}>
+                            {meta.label}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </ScrollArea>
+    </div>
   );
 }
 
@@ -690,6 +758,34 @@ export default function Email() {
   const inboxError  = inboxData?.error;
   const inboxConfigured = inboxData?.configured ?? true;
 
+  /* Triage state */
+  const [triageLabels, setTriageLabels] = useState<Record<number, TriageLabel>>({});
+  const [triageLoading, setTriageLoading] = useState(false);
+  const triagingRef = useRef(false);
+
+  useEffect(() => {
+    if (inboxEmails.length === 0 || triagingRef.current) return;
+    const untriaged = inboxEmails.filter(e => !(e.uid in triageLabels));
+    if (untriaged.length === 0) return;
+    triagingRef.current = true;
+    setTriageLoading(true);
+    fetch(`${BASE}/api/emails/triage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ emails: untriaged.map(e => ({ uid: e.uid, from: e.from.name || e.from.address, subject: e.subject })) }),
+    })
+      .then(r => r.json())
+      .then(({ labels }: { labels: Record<string, TriageLabel> }) => {
+        setTriageLabels(prev => {
+          const next = { ...prev };
+          for (const [uid, label] of Object.entries(labels)) next[Number(uid)] = label;
+          return next;
+        });
+      })
+      .catch(() => {})
+      .finally(() => { setTriageLoading(false); triagingRef.current = false; });
+  }, [inboxEmails.length, inboxRefreshKey]);
+
   /* Selection state */
   const [leftTab, setLeftTab] = useState<"inbox" | "drafts">("inbox");
   const [selectedUid, setSelectedUid] = useState<number | null>(null);
@@ -704,6 +800,7 @@ export default function Email() {
   const selectedDraft = drafts.find(d => d.id === selectedDraftId) ?? null;
 
   function handleRefresh() {
+    setTriageLabels({});
     setRefreshing(true);
     setInboxRefreshKey(k => k + 1);
     setTimeout(() => setRefreshing(false), 3000);
@@ -749,7 +846,8 @@ export default function Email() {
           {mobileTab === "inbox" && (
             <InboxList emails={inboxEmails} isLoading={inboxLoading} error={inboxError}
               selectedUid={selectedUid} onSelect={e => { setSelectedUid(e.uid); setMobileView("detail"); }}
-              refreshing={refreshing} onRefresh={handleRefresh} notConfigured={!inboxConfigured} />
+              refreshing={refreshing} onRefresh={handleRefresh} notConfigured={!inboxConfigured}
+              triageLabels={triageLabels} triageLoading={triageLoading} />
           )}
           {mobileTab === "compose" && (
             <ComposePanel onSaved={d => { setSelectedDraftId(d.id); setMobileTab("drafts"); setMobileView("detail"); }}
@@ -808,7 +906,8 @@ export default function Email() {
         {leftTab === "inbox" ? (
           <InboxList emails={inboxEmails} isLoading={inboxLoading} error={inboxError}
             selectedUid={selectedUid} onSelect={e => { setSelectedUid(e.uid); setSelectedDraftId(null); }}
-            refreshing={refreshing} onRefresh={handleRefresh} notConfigured={!inboxConfigured} />
+            refreshing={refreshing} onRefresh={handleRefresh} notConfigured={!inboxConfigured}
+            triageLabels={triageLabels} triageLoading={triageLoading} />
         ) : (
           <DraftsList drafts={drafts} isLoading={draftsLoading} selectedId={selectedDraftId}
             onSelect={d => { setSelectedDraftId(d.id); setSelectedUid(null); }}

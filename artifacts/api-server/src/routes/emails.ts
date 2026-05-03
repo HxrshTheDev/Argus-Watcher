@@ -73,6 +73,41 @@ router.post("/emails/reply", async (req, res): Promise<void> => {
   }
 });
 
+/* ── AI Triage: classify inbox emails ── */
+router.post("/emails/triage", async (req, res): Promise<void> => {
+  const { emails } = req.body as { emails: Array<{ uid: number; from: string; subject: string }> };
+  if (!Array.isArray(emails) || emails.length === 0) { res.json({ labels: {} }); return; }
+
+  const list = emails.map(e => `UID ${e.uid}: From "${e.from}" | Subject "${e.subject}"`).join("\n");
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      max_completion_tokens: 1500,
+      messages: [
+        {
+          role: "system",
+          content: `Classify each email into exactly one of these categories:
+- "action": requires a reply or explicit action from the recipient (someone asking a question, sending a document to review, deadline notice, meeting request, invoice/payment, personal message expecting response)
+- "fyi": purely informational, no response expected (confirmations, receipts, shipping updates, calendar invites with no RSVP, platform notifications)
+- "newsletter": newsletter, digest, blog post, product update, marketing or promotional email
+- "other": spam, automated alerts, or doesn't clearly fit above
+
+Return ONLY a compact JSON object mapping each UID number (as a string key) to its category.
+Example: {"123":"action","456":"newsletter","789":"fyi"}
+No markdown, no explanation, no extra keys.`,
+        },
+        { role: "user", content: list },
+      ],
+    });
+    const text = response.choices[0]?.message?.content ?? "{}";
+    let labels: Record<string, string> = {};
+    try { labels = JSON.parse(text); } catch {}
+    res.json({ labels });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "Triage failed" });
+  }
+});
+
 /* ── Generate draft with AI ── */
 router.post("/emails/draft", async (req, res): Promise<void> => {
   const parsed = GenerateEmailDraftBody.safeParse(req.body);
