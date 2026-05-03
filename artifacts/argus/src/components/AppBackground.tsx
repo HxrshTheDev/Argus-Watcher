@@ -1,3 +1,10 @@
+import type { CSSProperties } from "react";
+
+const BLOB_STYLE: CSSProperties = {
+  willChange: "transform",
+  contain: "layout style paint",
+};
+
 export function AppBackground() {
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none" aria-hidden>
@@ -8,6 +15,7 @@ export function AppBackground() {
       <div
         className="absolute rounded-full"
         style={{
+          ...BLOB_STYLE,
           top: "-30%",
           left: "-25%",
           width: "80vw",
@@ -15,10 +23,9 @@ export function AppBackground() {
           maxWidth: 960,
           maxHeight: 960,
           background: "radial-gradient(ellipse at 40% 40%, hsl(var(--blob-1)) 0%, hsl(var(--blob-1) / 0.6) 40%, transparent 70%)",
-          filter: "blur(60px)",
+          filter: "blur(50px)",
           animation: "blob-drift-1 42s ease-in-out infinite",
           opacity: 0.95,
-          mixBlendMode: "normal",
         }}
       />
 
@@ -26,6 +33,7 @@ export function AppBackground() {
       <div
         className="absolute rounded-full"
         style={{
+          ...BLOB_STYLE,
           top: "10%",
           right: "-22%",
           width: "65vw",
@@ -33,7 +41,7 @@ export function AppBackground() {
           maxWidth: 780,
           maxHeight: 780,
           background: "radial-gradient(ellipse at 55% 45%, hsl(var(--blob-2)) 0%, hsl(var(--blob-2) / 0.5) 45%, transparent 72%)",
-          filter: "blur(65px)",
+          filter: "blur(55px)",
           animation: "blob-drift-2 52s ease-in-out infinite",
           opacity: 0.88,
         }}
@@ -43,6 +51,7 @@ export function AppBackground() {
       <div
         className="absolute rounded-full"
         style={{
+          ...BLOB_STYLE,
           bottom: "-25%",
           left: "10%",
           width: "60vw",
@@ -50,7 +59,7 @@ export function AppBackground() {
           maxWidth: 720,
           maxHeight: 720,
           background: "radial-gradient(ellipse at 50% 55%, hsl(var(--blob-3)) 0%, hsl(var(--blob-3) / 0.4) 50%, transparent 72%)",
-          filter: "blur(75px)",
+          filter: "blur(60px)",
           animation: "blob-drift-3 48s ease-in-out infinite",
           opacity: 0.82,
         }}
@@ -60,6 +69,7 @@ export function AppBackground() {
       <div
         className="absolute rounded-full"
         style={{
+          ...BLOB_STYLE,
           top: "-12%",
           right: "2%",
           width: "42vw",
@@ -67,13 +77,13 @@ export function AppBackground() {
           maxWidth: 500,
           maxHeight: 500,
           background: "radial-gradient(ellipse at 50% 40%, hsl(var(--blob-4)) 0%, hsl(var(--blob-4) / 0.35) 55%, transparent 78%)",
-          filter: "blur(65px)",
+          filter: "blur(50px)",
           animation: "blob-drift-4 58s ease-in-out infinite",
           opacity: 0.72,
         }}
       />
 
-      {/* Grain texture for richness and depth */}
+      {/* Grain texture */}
       <div
         className="absolute inset-0"
         style={{

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useGetDashboardStats, useGetActivityFeed } from "@workspace/api-client-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -55,14 +55,53 @@ const MODULES = [
   { url: "/workflows", label: "Flows",     desc: "Automations",         icon: Zap,           gradient: "from-yellow-500 to-amber-500",    glow: "shadow-yellow-500/30" },
 ];
 
-/* ── Live clock hook ─────────────────────────────── */
-function useClock() {
-  const [now, setNow] = useState(new Date());
+/* ── Live clock widget (isolated so only IT re-renders every second) ── */
+function LiveClockWidget() {
+  const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
-  return now;
+
+  const timeStr = format(now, "HH:mm");
+  const secsStr = format(now, "ss");
+  const dayStr  = format(now, "EEE");
+
+  return (
+    <div
+      className="shrink-0 rounded-2xl px-4 py-3 text-right hidden sm:block relative overflow-hidden"
+      style={{
+        backdropFilter: "blur(24px) saturate(180%)",
+        WebkitBackdropFilter: "blur(24px) saturate(180%)",
+        background: "rgba(255,255,255,0.45)",
+        border: "1px solid rgba(255,255,255,0.65)",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.5)",
+      }}
+    >
+      <div className="hidden dark:block absolute inset-0 rounded-2xl pointer-events-none"
+        style={{ background: "rgba(30,10,16,0.52)", border: "1px solid rgba(255,255,255,0.06)" }}
+      />
+      <div className="relative">
+        <div className="tabular-nums text-[28px] font-black tracking-tight leading-none text-foreground">
+          {timeStr}
+          <span className="text-foreground/25 text-[16px] ml-0.5">:{secsStr}</span>
+        </div>
+        <p className="text-[10px] font-semibold text-foreground/40 dark:text-muted-foreground/60 mt-1 uppercase tracking-widest">{dayStr}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ── Greeting (computed once per render, not every second) ── */
+function useGreeting() {
+  return useMemo(() => {
+    const h = new Date().getHours();
+    return {
+      text:  h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening",
+      emoji: h < 5 ? "🌙" : h < 12 ? "☀️" : h < 17 ? "🌤️" : "🌇",
+      date:  format(new Date(), "EEEE, MMMM d"),
+    };
+  }, []);
 }
 
 /* ── Activity modal ─────────────────────────────── */
@@ -339,14 +378,7 @@ export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats();
   const { data: feed, isLoading: feedLoading } = useGetActivityFeed();
   const [selectedActivity, setSelectedActivity] = useState<any>(null);
-  const now = useClock();
-
-  const h = now.getHours();
-  const greeting = h < 5 ? "Good night" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-  const greetingEmoji = h < 5 ? "🌙" : h < 12 ? "☀️" : h < 17 ? "🌤️" : "🌇";
-
-  const timeStr = format(now, "HH:mm");
-  const secsStr = format(now, "ss");
+  const { text: greeting, emoji: greetingEmoji, date: greetingDate } = useGreeting();
 
   return (
     <>
@@ -359,7 +391,7 @@ export default function Dashboard() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xl">{greetingEmoji}</span>
-                  <span className="text-[11px] font-semibold text-foreground/40 dark:text-muted-foreground/60 uppercase tracking-widest">{format(now, "EEEE, MMMM d")}</span>
+                  <span className="text-[11px] font-semibold text-foreground/40 dark:text-muted-foreground/60 uppercase tracking-widest">{greetingDate}</span>
                 </div>
                 <h1 className="text-[30px] sm:text-[36px] font-black tracking-tight leading-tight text-foreground">
                   {greeting}
@@ -367,31 +399,8 @@ export default function Dashboard() {
                 <p className="text-[13px] text-foreground/50 dark:text-muted-foreground mt-1 font-medium">Your personal AI overview.</p>
               </div>
 
-              {/* Live clock widget */}
-              <div
-                className="shrink-0 rounded-2xl px-4 py-3 text-right hidden sm:block"
-                style={{
-                  backdropFilter: "blur(24px) saturate(180%)",
-                  WebkitBackdropFilter: "blur(24px) saturate(180%)",
-                  background: "rgba(255,255,255,0.45)",
-                  border: "1px solid rgba(255,255,255,0.65)",
-                  boxShadow: "0 4px 20px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.5)",
-                }}
-              >
-                <div className="hidden dark:block absolute inset-0 rounded-2xl pointer-events-none"
-                  style={{
-                    background: "rgba(30,10,16,0.52)",
-                    border: "1px solid rgba(255,255,255,0.06)",
-                  }}
-                />
-                <div className="relative">
-                  <div className="tabular-nums text-[28px] font-black tracking-tight leading-none text-foreground">
-                    {timeStr}
-                    <span className="text-foreground/25 text-[16px] ml-0.5">:{secsStr}</span>
-                  </div>
-                  <p className="text-[10px] font-semibold text-foreground/40 dark:text-muted-foreground/60 mt-1 uppercase tracking-widest">{format(now, "EEE")}</p>
-                </div>
-              </div>
+              {/* Live clock — isolated component, only IT ticks */}
+              <LiveClockWidget />
             </div>
 
             {/* ── Daily Briefing ── */}
