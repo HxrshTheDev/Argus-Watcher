@@ -1,20 +1,26 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format, isToday, isThisYear } from "date-fns";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  Mail, Sparkles, Trash2, Copy, Check, Loader2,
-  FileText, ChevronRight, X, ArrowRight, MailOpen,
-  ChevronLeft, Send, Settings, CheckCircle2, AlertCircle,
+  Mail, Sparkles, Trash2, Copy, Check, Loader2, FileText,
+  ChevronRight, X, ArrowRight, MailOpen, ChevronLeft, Send,
+  Settings, CheckCircle2, AlertCircle, Inbox, RefreshCw, Reply,
+  WifiOff, Eye, AlignLeft,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+/* ── Types ── */
 interface Draft   { id: number; subject: string; body: string; recipient?: string | null; context?: string | null; status: string; createdAt: string; }
 interface Generated { subject: string; body: string }
 interface Summary   { summary: string; keyPoints: string[]; actionRequired: boolean }
-interface SmtpStatus { configured: boolean; from: string | null }
+interface SmtpStatus { configured: boolean; imapConfigured: boolean; from: string | null }
+interface InboxEmail { uid: number; from: { name: string; address: string }; subject: string; date: string; snippet: string; seen: boolean; }
+interface InboxEmailDetail extends InboxEmail { to: string; text: string; html: string | null; }
+interface InboxData { emails: InboxEmail[]; unread: number; configured: boolean; error?: string }
+interface ReplyTo { to: string; subject: string; originalText?: string }
 
 const TONES = [
   { id: "professional", label: "Professional", emoji: "💼" },
@@ -24,9 +30,43 @@ const TONES = [
   { id: "assertive",    label: "Assertive",    emoji: "🎯" },
 ];
 
+/* ── Helpers ── */
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  if (isToday(d))      return format(d, "h:mm a");
+  if (isThisYear(d))   return format(d, "MMM d");
+  return format(d, "MMM d, yyyy");
+}
+
 /* ── Hooks ── */
 function useDrafts()     { return useQuery<Draft[]>({ queryKey: ["email-drafts"], queryFn: async () => { const r = await fetch(`${BASE}/api/emails`); return r.json(); } }); }
 function useSmtpStatus() { return useQuery<SmtpStatus>({ queryKey: ["smtp-status"], queryFn: async () => { const r = await fetch(`${BASE}/api/emails/smtp-status`); return r.json(); }, staleTime: 60_000 }); }
+
+function useInbox(refreshKey = 0) {
+  return useQuery<InboxData>({
+    queryKey: ["inbox", refreshKey],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/emails/inbox${refreshKey > 0 ? "?refresh=1" : ""}`);
+      if (!r.ok) { const e = await r.json().catch(() => ({})); return { emails: [], unread: 0, configured: true, error: e?.error ?? "Failed" }; }
+      return r.json();
+    },
+    staleTime: 3 * 60_000,
+    retry: 1,
+  });
+}
+
+function useEmailBody(uid: number | null) {
+  return useQuery<InboxEmailDetail>({
+    queryKey: ["inbox-email", uid],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/api/emails/inbox/${uid}`);
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "Failed");
+      return r.json();
+    },
+    enabled: uid !== null,
+    staleTime: 10 * 60_000,
+  });
+}
 
 function useGenerateDraft() {
   return useMutation<Generated, Error, { context: string; recipient: string; tone: string }>({
@@ -50,9 +90,7 @@ function useSendEmail() {
   return useMutation<{ success: boolean; messageId: string; message: string }, { message: string }, { to: string; subject: string; body: string }>({
     mutationFn: async (d) => {
       const r = await fetch(`${BASE}/api/emails/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(d) });
-      const json = await r.json();
-      if (!r.ok) throw json;
-      return json;
+      const json = await r.json(); if (!r.ok) throw json; return json;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["email-drafts"] }),
   });
@@ -64,6 +102,14 @@ function useDeleteDraft() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["email-drafts"] }),
   });
 }
+function useReply() {
+  return useMutation<{ success: boolean }, Error, { to: string; subject: string; body: string }>({
+    mutationFn: async (d) => {
+      const r = await fetch(`${BASE}/api/emails/reply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(d) });
+      const json = await r.json(); if (!r.ok) throw json; return json;
+    },
+  });
+}
 
 /* ── Copy button ── */
 function CopyButton({ text, className = "" }: { text: string; className?: string }) {
@@ -73,6 +119,203 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
       className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${copied ? "bg-emerald-500/15 text-emerald-500" : "hover:bg-muted text-muted-foreground hover:text-foreground"} ${className}`}>
       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
+  );
+}
+
+/* ── Inbox List ── */
+function InboxList({ emails, isLoading, error, selectedUid, onSelect, refreshing, onRefresh, notConfigured }: {
+  emails: InboxEmail[]; isLoading: boolean; error?: string;
+  selectedUid: number | null; onSelect: (e: InboxEmail) => void;
+  refreshing: boolean; onRefresh: () => void; notConfigured: boolean;
+}) {
+  if (notConfigured) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full px-5 text-center gap-3 pb-10">
+        <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center"><WifiOff className="w-5 h-5 text-muted-foreground" /></div>
+        <div>
+          <p className="font-bold text-sm text-foreground/70">SMTP not configured</p>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">Add <code className="font-mono text-primary">SMTP_USER</code> and <code className="font-mono text-primary">SMTP_PASS</code> to enable Gmail inbox</p>
+        </div>
+      </div>
+    );
+  }
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+        <p className="text-xs font-semibold">Connecting to Gmail…</p>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full px-5 text-center gap-3 pb-10">
+        <div className="w-12 h-12 rounded-2xl bg-destructive/10 flex items-center justify-center"><AlertCircle className="w-5 h-5 text-destructive" /></div>
+        <div>
+          <p className="font-bold text-sm text-foreground/70">Connection failed</p>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{error}</p>
+        </div>
+        <button onClick={onRefresh} className="px-4 py-2 rounded-xl bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-all">Retry</button>
+      </div>
+    );
+  }
+  if (emails.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center pb-10">
+        <div className="w-12 h-12 rounded-2xl bg-primary/8 flex items-center justify-center mb-3"><Inbox className="w-5 h-5 text-primary/60" /></div>
+        <p className="text-sm font-semibold text-foreground/50">Inbox is empty</p>
+      </div>
+    );
+  }
+  return (
+    <ScrollArea className="flex-1">
+      <div className="py-1.5 px-2 space-y-0.5">
+        {emails.map(email => (
+          <button key={email.uid} onClick={() => onSelect(email)}
+            className={`w-full text-left px-3 py-2.5 rounded-xl transition-all group ${selectedUid === email.uid ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50 border border-transparent"}`}>
+            <div className="flex items-start gap-2">
+              {!email.seen && <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />}
+              {email.seen  && <div className="w-1.5 h-1.5 shrink-0 mt-1.5" />}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <p className={`text-[13px] truncate ${!email.seen ? "font-bold" : "font-medium text-foreground/70"}`}>
+                    {email.from.name || email.from.address}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/60 shrink-0">{fmtDate(email.date)}</p>
+                </div>
+                <p className={`text-[12px] truncate mt-0.5 ${!email.seen ? "font-semibold" : "text-muted-foreground"}`}>{email.subject}</p>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </ScrollArea>
+  );
+}
+
+/* ── Inbox Detail ── */
+function InboxDetail({ uid, onReply, onBack }: { uid: number; onReply: (r: ReplyTo) => void; onBack?: () => void }) {
+  const { data: email, isLoading, error } = useEmailBody(uid);
+  const [showHtml, setShowHtml] = useState(true);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [iframeH, setIframeH] = useState(400);
+
+  const wrappedHtml = email?.html
+    ? `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;padding:20px;margin:0;line-height:1.6;word-break:break-word;overflow-wrap:break-word;max-width:100%}img{max-width:100%;height:auto}a{color:inherit}</style></head><body>${email.html}</body></html>`
+    : null;
+
+  function handleIframeLoad() {
+    try {
+      const h = iframeRef.current?.contentDocument?.body?.scrollHeight;
+      if (h && h > 0) setIframeH(h + 40);
+    } catch {}
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-full">
+        {onBack && (
+          <div className="px-5 py-4 border-b border-border/60">
+            <button onClick={onBack} className="w-8 h-8 rounded-xl flex items-center justify-center text-primary hover:bg-primary/10 transition-all">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+          </div>
+        )}
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin text-primary" />
+          <p className="text-xs font-semibold">Loading email…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !email) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center gap-3 text-muted-foreground">
+        <AlertCircle className="w-5 h-5 text-destructive" />
+        <p className="text-sm font-semibold">Failed to load email</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-background">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-border/60 bg-background/80">
+        <div className="flex items-start gap-3">
+          {onBack && (
+            <button onClick={onBack} className="w-8 h-8 rounded-xl flex items-center justify-center text-primary hover:bg-primary/10 transition-all mt-0.5 shrink-0">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
+            <h2 className="font-bold text-[15px] leading-tight tracking-tight">{email.subject}</h2>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1.5">
+              <p className="text-[12px] text-muted-foreground">
+                <span className="font-semibold text-foreground/70">{email.from.name || email.from.address}</span>
+                {email.from.name && <span className="opacity-60"> &lt;{email.from.address}&gt;</span>}
+              </p>
+              <p className="text-[11px] text-muted-foreground/50">{format(new Date(email.date), "MMM d, yyyy h:mm a")}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <CopyButton text={`From: ${email.from.address}\nSubject: ${email.subject}\n\n${email.text}`} />
+            <button
+              onClick={() => onReply({ to: email.from.address, subject: email.subject, originalText: email.text })}
+              className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-all">
+              <Reply className="w-3.5 h-3.5" /> Reply
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <ScrollArea className="flex-1">
+        <div className="p-5">
+          {/* Toggle view */}
+          {email.html && (
+            <div className="flex items-center gap-1 mb-4">
+              <button onClick={() => setShowHtml(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${showHtml ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}>
+                <Eye className="w-3 h-3" /> Formatted
+              </button>
+              <button onClick={() => setShowHtml(false)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${!showHtml ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}>
+                <AlignLeft className="w-3 h-3" /> Plain text
+              </button>
+            </div>
+          )}
+
+          {/* Content */}
+          {email.html && showHtml ? (
+            <div className="rounded-2xl border border-border overflow-hidden bg-white">
+              <iframe
+                ref={iframeRef}
+                srcDoc={wrappedHtml!}
+                sandbox="allow-same-origin"
+                className="w-full border-0 block"
+                style={{ height: iframeH }}
+                title="Email content"
+                onLoad={handleIframeLoad}
+              />
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-border bg-card/60 p-5 text-sm leading-relaxed whitespace-pre-wrap font-[inherit]">
+              {email.text || "(no plain text version)"}
+            </div>
+          )}
+
+          {/* Reply bar */}
+          <div className="mt-5 pt-5 border-t border-border/40">
+            <button
+              onClick={() => onReply({ to: email.from.address, subject: email.subject, originalText: email.text })}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 text-sm font-bold transition-all text-muted-foreground hover:text-primary">
+              <Reply className="w-4 h-4" /> Reply to {email.from.name || email.from.address}
+            </button>
+          </div>
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
 
@@ -125,7 +368,7 @@ function DraftDetail({ draft, onDelete, onBack }: { draft: Draft; onDelete: () =
 }
 
 /* ── Compose panel ── */
-function ComposePanel({ onSaved }: { onSaved: (draft: Draft) => void }) {
+function ComposePanel({ onSaved, replyTo, onClearReply }: { onSaved: (draft: Draft) => void; replyTo?: ReplyTo | null; onClearReply?: () => void }) {
   const [mode, setMode] = useState<"compose" | "summarize">("compose");
   const [tone, setTone] = useState("professional");
   const [to, setTo]     = useState("");
@@ -142,7 +385,20 @@ function ComposePanel({ onSaved }: { onSaved: (draft: Draft) => void }) {
   const save        = useSaveDraft();
   const summarize   = useSummarize();
   const sendEmail   = useSendEmail();
+  const reply       = useReply();
   const { data: smtpStatus } = useSmtpStatus();
+
+  /* Pre-fill when replyTo changes */
+  useEffect(() => {
+    if (!replyTo) return;
+    setMode("compose");
+    setGenerated(null);
+    setTo(replyTo.to);
+    setEditedTo(replyTo.to);
+    const reSubject = replyTo.subject.match(/^re:/i) ? replyTo.subject : `Re: ${replyTo.subject}`;
+    setEditedSubject(reSubject);
+    setContext(replyTo.originalText ? `Reply to this email:\n\n${replyTo.originalText.slice(0, 600)}` : "Write a thoughtful reply");
+  }, [replyTo]);
 
   const inputCls    = "w-full h-11 px-3.5 rounded-xl border border-input bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all font-medium";
   const textareaCls = "w-full px-3.5 py-3 rounded-xl border border-input bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none leading-relaxed";
@@ -151,28 +407,42 @@ function ComposePanel({ onSaved }: { onSaved: (draft: Draft) => void }) {
   const handleGenerate = async () => {
     if (!context.trim()) return;
     const result = await generate.mutateAsync({ context, recipient: to, tone });
-    setGenerated(result); setEditedSubject(result.subject); setEditedBody(result.body); setEditedTo(to);
+    if (!editedTo) setEditedTo(to);
+    if (!editedSubject && result.subject) {
+      const pre = replyTo && !replyTo.subject.match(/^re:/i) ? "Re: " : "";
+      setEditedSubject(pre + result.subject);
+    }
+    setGenerated(result); setEditedBody(result.body);
   };
 
   const handleSave = async () => {
     if (!editedBody || !editedSubject) return;
     const draft = await save.mutateAsync({ subject: editedSubject, body: editedBody, recipient: editedTo, context });
     onSaved(draft);
-    setGenerated(null); setEditedBody(""); setEditedSubject(""); setContext(""); setTo("");
+    reset();
   };
 
   const handleSend = async () => {
     if (!editedTo || !editedSubject || !editedBody) return;
     setSendResult(null);
     try {
-      await sendEmail.mutateAsync({ to: editedTo, subject: editedSubject, body: editedBody });
+      if (replyTo) {
+        await reply.mutateAsync({ to: editedTo, subject: editedSubject, body: editedBody });
+      } else {
+        await sendEmail.mutateAsync({ to: editedTo, subject: editedSubject, body: editedBody });
+      }
       setSendResult({ ok: true, msg: `Sent to ${editedTo}` });
+      if (replyTo && onClearReply) onClearReply();
     } catch (err: any) {
       setSendResult({ ok: false, msg: err?.error ?? err?.message ?? "Failed to send" });
     }
   };
 
-  /* Clear send result after 5s */
+  function reset() {
+    setGenerated(null); setEditedBody(""); setEditedSubject(""); setContext(""); setTo(""); setEditedTo(""); setSendResult(null);
+    if (onClearReply) onClearReply();
+  }
+
   useEffect(() => {
     if (!sendResult) return;
     const t = setTimeout(() => setSendResult(null), 5000);
@@ -233,10 +503,20 @@ function ComposePanel({ onSaved }: { onSaved: (draft: Draft) => void }) {
   }
 
   /* ── Compose mode ── */
+  const isSendingReply = !!(replyTo && (reply.isPending || sendEmail.isPending));
+  const isSending = reply.isPending || sendEmail.isPending;
+
   return (
     <div className="flex flex-col h-full">
       <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between bg-background/50">
-        <h2 className="font-black text-[14px] tracking-tight">AI Compose</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-black text-[14px] tracking-tight">AI Compose</h2>
+          {replyTo && (
+            <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 font-bold border border-blue-500/20">
+              <Reply className="w-2.5 h-2.5" /> Reply
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           {smtpStatus?.configured && (
             <div className="flex items-center gap-1 text-[11px] text-emerald-500 font-semibold">
@@ -268,32 +548,34 @@ function ComposePanel({ onSaved }: { onSaved: (draft: Draft) => void }) {
               <input value={to} onChange={e => setTo(e.target.value)} placeholder="recipient@example.com" type="email" className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>What should this email say?</label>
+              <label className={labelCls}>{replyTo ? "Instructions for AI reply" : "What should this email say?"}</label>
               <textarea value={context} onChange={e => setContext(e.target.value)}
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleGenerate(); }}
-                placeholder="Describe the email purpose, key points, specific requests…" rows={5} className={textareaCls}
+                placeholder={replyTo ? "e.g. Politely decline, confirm availability, ask for more info…" : "Describe the email purpose, key points, specific requests…"} rows={5} className={textareaCls}
               />
               <p className="text-[11px] text-muted-foreground/60 mt-1.5">⌘ + Enter to generate</p>
             </div>
             <button onClick={handleGenerate} disabled={!context.trim() || generate.isPending}
               className="w-full py-3.5 rounded-2xl bg-primary text-primary-foreground text-sm font-black disabled:opacity-40 hover:bg-primary/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-[0.98]">
-              {generate.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Writing…</> : <><Sparkles className="w-4 h-4" /> Generate Email</>}
+              {generate.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Writing…</> : <><Sparkles className="w-4 h-4" /> {replyTo ? "Generate Reply" : "Generate Email"}</>}
             </button>
+            {replyTo && (
+              <button onClick={reset} className="w-full py-2.5 rounded-2xl bg-muted hover:bg-muted/80 text-sm font-bold transition-all text-muted-foreground active:scale-[0.98]">
+                Clear reply
+              </button>
+            )}
           </div>
         ) : (
           <div className="p-5 space-y-4">
             <div className="flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
-              <Check className="w-3.5 h-3.5" /> Email generated — edit, send, or save
+              <Check className="w-3.5 h-3.5" /> {replyTo ? "Reply ready — edit and send" : "Email generated — edit, send, or save"}
             </div>
-
-            {/* Send result feedback */}
             {sendResult && (
               <div className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl text-xs font-bold border ${sendResult.ok ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-destructive/10 border-destructive/20 text-destructive"}`}>
                 {sendResult.ok ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 shrink-0" />}
                 {sendResult.msg}
               </div>
             )}
-
             <div>
               <label className={labelCls}>To <span className="text-destructive">*</span></label>
               <input value={editedTo} onChange={e => setEditedTo(e.target.value)} placeholder="recipient@example.com" type="email" className={inputCls} />
@@ -309,30 +591,26 @@ function ComposePanel({ onSaved }: { onSaved: (draft: Draft) => void }) {
               </div>
               <textarea value={editedBody} onChange={e => setEditedBody(e.target.value)} rows={10} className={textareaCls} />
             </div>
-
-            {/* SMTP not configured warning */}
             {!smtpStatus?.configured && (
               <div className="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
                 <Settings className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                 <span><span className="font-bold">SMTP not configured.</span> Add <code className="font-mono">SMTP_USER</code> and <code className="font-mono">SMTP_PASS</code> to your environment secrets to enable sending.</span>
               </div>
             )}
-
             <div className="flex gap-2">
-              {/* Send Now */}
               <button onClick={handleSend}
-                disabled={!editedTo || !editedSubject || !editedBody || sendEmail.isPending || !smtpStatus?.configured}
+                disabled={!editedTo || !editedSubject || !editedBody || isSending || !smtpStatus?.configured}
                 title={!smtpStatus?.configured ? "Configure SMTP to send emails" : ""}
                 className="flex-1 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-600/90 text-white text-sm font-black disabled:opacity-40 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-[0.98]">
-                {sendEmail.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : <><Send className="w-4 h-4" /> Send Now</>}
+                {isSending ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : <><Send className="w-4 h-4" /> {replyTo ? "Send Reply" : "Send Now"}</>}
               </button>
-              {/* Save Draft */}
-              <button onClick={handleSave} disabled={!editedSubject || !editedBody || save.isPending}
-                className="py-3.5 px-4 rounded-2xl bg-primary/15 hover:bg-primary/25 text-primary text-sm font-black disabled:opacity-40 transition-all flex items-center justify-center gap-2 border border-primary/20 active:scale-[0.98]">
-                {save.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              </button>
-              {/* Redo */}
-              <button onClick={() => { setGenerated(null); setEditedBody(""); setEditedSubject(""); setSendResult(null); }}
+              {!replyTo && (
+                <button onClick={handleSave} disabled={!editedSubject || !editedBody || save.isPending}
+                  className="py-3.5 px-4 rounded-2xl bg-primary/15 hover:bg-primary/25 text-primary text-sm font-black disabled:opacity-40 transition-all flex items-center justify-center gap-2 border border-primary/20 active:scale-[0.98]">
+                  {save.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                </button>
+              )}
+              <button onClick={reset}
                 className="px-4 py-3.5 rounded-2xl bg-muted hover:bg-muted/80 text-sm font-bold transition-all active:scale-[0.98]">↺</button>
             </div>
             {smtpStatus?.configured && (
@@ -356,43 +634,43 @@ function DraftsList({ drafts, isLoading, selectedId, onSelect, search, setSearch
   );
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 pt-4 pb-3 border-b border-border/60">
+      <div className="px-3 pt-3 pb-2">
         <div className="relative">
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search drafts…"
-            className="w-full h-9 pl-4 pr-8 rounded-xl border border-input bg-muted/40 text-[13px] focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" />
-          {search && <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>}
+            className="w-full h-8 pl-3.5 pr-8 rounded-xl border border-input bg-muted/40 text-[12px] focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all" />
+          {search && <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="w-3 h-3" /></button>}
         </div>
       </div>
       <ScrollArea className="flex-1">
         {isLoading ? (
-          <div className="p-3 space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-16 rounded-xl shimmer" />)}</div>
+          <div className="p-3 space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-14 rounded-xl shimmer" />)}</div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14 px-4 text-center text-muted-foreground">
-            <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center mb-4"><Mail className="w-5 h-5 text-red-400 opacity-60" /></div>
-            <p className="text-sm font-semibold text-foreground/50">{search ? "No drafts match" : "No saved drafts yet"}</p>
-            <p className="text-xs mt-1 opacity-50">Use AI Compose to write your first email</p>
+          <div className="flex flex-col items-center justify-center py-12 px-4 text-center text-muted-foreground">
+            <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center mb-3"><Mail className="w-4 h-4 text-red-400 opacity-60" /></div>
+            <p className="text-[13px] font-semibold text-foreground/50">{search ? "No drafts match" : "No saved drafts yet"}</p>
+            <p className="text-[11px] mt-1 opacity-50">Use AI Compose to write your first email</p>
           </div>
         ) : (
-          <div className="py-2 px-2 space-y-1">
+          <div className="py-1 px-2 space-y-0.5">
             {filtered.map(draft => (
               <button key={draft.id} onClick={() => onSelect(draft)}
-                className={`w-full text-left px-3 py-3 rounded-xl transition-all group ${selectedId === draft.id ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50 border border-transparent"}`}>
+                className={`w-full text-left px-3 py-2.5 rounded-xl transition-all group ${selectedId === draft.id ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50 border border-transparent"}`}>
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-bold text-[13px] truncate">{draft.subject}</p>
+                  <p className="font-bold text-[12px] truncate">{draft.subject}</p>
                   <div className="flex items-center gap-1 shrink-0">
                     {draft.status === "sent" && <span className="text-[9px] font-black uppercase tracking-wider text-emerald-500">Sent</span>}
                     <ChevronRight className={`w-3.5 h-3.5 mt-0.5 ${selectedId === draft.id ? "text-primary" : "text-muted-foreground opacity-0 group-hover:opacity-100"}`} />
                   </div>
                 </div>
                 {draft.recipient && <p className="text-[11px] text-muted-foreground mt-0.5 truncate">To: {draft.recipient}</p>}
-                <p className="text-[11px] text-muted-foreground/60 mt-0.5">{formatDistanceToNow(new Date(draft.createdAt), { addSuffix: true })}</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-0.5">{formatDistanceToNow(new Date(draft.createdAt), { addSuffix: true })}</p>
               </button>
             ))}
           </div>
         )}
       </ScrollArea>
-      <div className="px-4 py-2.5 border-t border-border/40">
-        <p className="text-[11px] text-muted-foreground/60 text-center">{drafts.length} email{drafts.length !== 1 ? "s" : ""}</p>
+      <div className="px-4 py-2 border-t border-border/40">
+        <p className="text-[10px] text-muted-foreground/60 text-center">{drafts.length} email{drafts.length !== 1 ? "s" : ""}</p>
       </div>
     </div>
   );
@@ -401,69 +679,170 @@ function DraftsList({ drafts, isLoading, selectedId, onSelect, search, setSearch
 /* ── Main ── */
 export default function Email() {
   const isMobile = useIsMobile();
-  const { data: drafts = [], isLoading } = useDrafts();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [search, setSearch] = useState("");
-  const [mobileTab, setMobileTab] = useState<"compose" | "drafts">("compose");
-  const [mobileViewDraft, setMobileViewDraft] = useState(false);
+  const { data: drafts = [], isLoading: draftsLoading } = useDrafts();
 
-  const selected = drafts.find(d => d.id === selectedId) ?? null;
+  /* Inbox state */
+  const [inboxRefreshKey, setInboxRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const { data: inboxData, isLoading: inboxLoading } = useInbox(inboxRefreshKey);
+  const inboxEmails = inboxData?.emails ?? [];
+  const inboxUnread = inboxData?.unread ?? 0;
+  const inboxError  = inboxData?.error;
+  const inboxConfigured = inboxData?.configured ?? true;
 
+  /* Selection state */
+  const [leftTab, setLeftTab] = useState<"inbox" | "drafts">("inbox");
+  const [selectedUid, setSelectedUid] = useState<number | null>(null);
+  const [selectedDraftId, setSelectedDraftId] = useState<number | null>(null);
+  const [draftSearch, setDraftSearch] = useState("");
+  const [replyTo, setReplyTo] = useState<ReplyTo | null>(null);
+
+  /* Mobile state */
+  const [mobileTab, setMobileTab] = useState<"inbox" | "compose" | "drafts">("inbox");
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+
+  const selectedDraft = drafts.find(d => d.id === selectedDraftId) ?? null;
+
+  function handleRefresh() {
+    setRefreshing(true);
+    setInboxRefreshKey(k => k + 1);
+    setTimeout(() => setRefreshing(false), 3000);
+  }
+
+  function handleReply(r: ReplyTo) {
+    setReplyTo(r);
+  }
+
+  /* ── Mobile ── */
   if (isMobile) {
-    if (mobileViewDraft && selected) {
-      return (
-        <div className="flex flex-col h-full bg-background">
-          <DraftDetail draft={selected} onDelete={() => { setSelectedId(null); setMobileViewDraft(false); }} onBack={() => setMobileViewDraft(false)} />
-        </div>
-      );
+    if (mobileView === "detail") {
+      if (mobileTab === "inbox" && selectedUid !== null) {
+        return (
+          <div className="flex flex-col h-full bg-background">
+            <InboxDetail uid={selectedUid} onReply={r => { setReplyTo(r); setMobileTab("compose"); setMobileView("list"); }} onBack={() => setMobileView("list")} />
+          </div>
+        );
+      }
+      if (mobileTab === "drafts" && selectedDraft) {
+        return (
+          <div className="flex flex-col h-full bg-background">
+            <DraftDetail draft={selectedDraft} onDelete={() => { setSelectedDraftId(null); setMobileView("list"); }} onBack={() => setMobileView("list")} />
+          </div>
+        );
+      }
     }
     return (
       <div className="flex flex-col h-full bg-background">
         <div className="px-5 pt-7 pb-0">
           <h1 className="text-[28px] font-black tracking-tight leading-none mb-4">Email</h1>
           <div className="flex gap-1.5">
-            {(["compose", "drafts"] as const).map(t => (
+            {(["inbox", "compose", "drafts"] as const).map(t => (
               <button key={t} onClick={() => setMobileTab(t)}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all capitalize ${mobileTab === t ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground"}`}>
-                {t === "drafts" ? `Drafts (${drafts.length})` : "Compose"}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all capitalize relative ${mobileTab === t ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground"}`}>
+                {t === "inbox" ? `Inbox${inboxUnread > 0 ? ` (${inboxUnread})` : ""}` : t === "drafts" ? `Drafts (${drafts.length})` : "Compose"}
               </button>
             ))}
           </div>
           <div className="h-px bg-border/60 mt-4" />
         </div>
         <div className="flex-1 overflow-hidden">
-          {mobileTab === "compose"
-            ? <ComposePanel onSaved={d => { setSelectedId(d.id); setMobileTab("drafts"); setMobileViewDraft(true); }} />
-            : <DraftsList drafts={drafts} isLoading={isLoading} selectedId={selectedId} onSelect={d => { setSelectedId(d.id); setMobileViewDraft(true); }} search={search} setSearch={setSearch} />}
+          {mobileTab === "inbox" && (
+            <InboxList emails={inboxEmails} isLoading={inboxLoading} error={inboxError}
+              selectedUid={selectedUid} onSelect={e => { setSelectedUid(e.uid); setMobileView("detail"); }}
+              refreshing={refreshing} onRefresh={handleRefresh} notConfigured={!inboxConfigured} />
+          )}
+          {mobileTab === "compose" && (
+            <ComposePanel onSaved={d => { setSelectedDraftId(d.id); setMobileTab("drafts"); setMobileView("detail"); }}
+              replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
+          )}
+          {mobileTab === "drafts" && (
+            <DraftsList drafts={drafts} isLoading={draftsLoading} selectedId={selectedDraftId}
+              onSelect={d => { setSelectedDraftId(d.id); setMobileView("detail"); }}
+              search={draftSearch} setSearch={setDraftSearch} />
+          )}
         </div>
       </div>
     );
   }
 
+  /* ── Desktop ── */
   return (
     <div className="flex h-full w-full overflow-hidden bg-background">
+      {/* Left panel */}
       <div className="w-72 shrink-0 border-r border-border flex flex-col bg-sidebar">
-        <div className="px-5 pt-6 pb-4 border-b border-border/60">
-          <h1 className="text-[22px] font-black tracking-tight leading-none mb-0.5">Email</h1>
-          <p className="text-[12px] text-muted-foreground">AI compose & send</p>
+        {/* Header */}
+        <div className="px-4 pt-5 pb-3 border-b border-border/60">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h1 className="text-[20px] font-black tracking-tight leading-none">Email</h1>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Inbox & drafts</p>
+            </div>
+            {leftTab === "inbox" && (
+              <button onClick={handleRefresh} disabled={refreshing || inboxLoading}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all disabled:opacity-40">
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshing || inboxLoading ? "animate-spin" : ""}`} />
+              </button>
+            )}
+          </div>
+          {/* Tabs */}
+          <div className="flex gap-1 p-0.5 rounded-xl bg-muted/50 border border-border/40">
+            <button onClick={() => setLeftTab("inbox")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[10px] text-xs font-bold transition-all ${leftTab === "inbox" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              <Inbox className="w-3.5 h-3.5" />
+              Inbox
+              {inboxUnread > 0 && (
+                <span className="min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-black flex items-center justify-center">{inboxUnread}</span>
+              )}
+            </button>
+            <button onClick={() => setLeftTab("drafts")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[10px] text-xs font-bold transition-all ${leftTab === "drafts" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              <FileText className="w-3.5 h-3.5" />
+              Drafts
+              {drafts.length > 0 && (
+                <span className="min-w-[16px] h-4 px-1 rounded-full bg-muted-foreground/20 text-muted-foreground text-[10px] font-black flex items-center justify-center">{drafts.length}</span>
+              )}
+            </button>
+          </div>
         </div>
-        <DraftsList drafts={drafts} isLoading={isLoading} selectedId={selectedId} onSelect={d => setSelectedId(d.id)} search={search} setSearch={setSearch} />
+
+        {leftTab === "inbox" ? (
+          <InboxList emails={inboxEmails} isLoading={inboxLoading} error={inboxError}
+            selectedUid={selectedUid} onSelect={e => { setSelectedUid(e.uid); setSelectedDraftId(null); }}
+            refreshing={refreshing} onRefresh={handleRefresh} notConfigured={!inboxConfigured} />
+        ) : (
+          <DraftsList drafts={drafts} isLoading={draftsLoading} selectedId={selectedDraftId}
+            onSelect={d => { setSelectedDraftId(d.id); setSelectedUid(null); }}
+            search={draftSearch} setSearch={setDraftSearch} />
+        )}
       </div>
+
+      {/* Middle panel */}
       <div className="flex-1 border-r border-border overflow-hidden">
-        {selected ? <DraftDetail draft={selected} onDelete={() => setSelectedId(null)} /> : (
+        {leftTab === "inbox" && selectedUid !== null ? (
+          <InboxDetail uid={selectedUid} onReply={handleReply} />
+        ) : leftTab === "drafts" && selectedDraft ? (
+          <DraftDetail draft={selectedDraft} onDelete={() => setSelectedDraftId(null)} />
+        ) : (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-4">
-            <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center shadow-xl shadow-red-500/20">
-              <Mail className="w-7 h-7 text-white" />
+            <div className={`w-16 h-16 rounded-3xl bg-gradient-to-br ${leftTab === "inbox" ? "from-blue-500 to-indigo-600 shadow-blue-500/20" : "from-red-500 to-rose-600 shadow-red-500/20"} flex items-center justify-center shadow-xl`}>
+              {leftTab === "inbox" ? <Inbox className="w-7 h-7 text-white" /> : <Mail className="w-7 h-7 text-white" />}
             </div>
             <div className="text-center">
-              <p className="font-black text-base text-foreground/60 tracking-tight">Select an email</p>
-              <p className="text-[12px] mt-1 opacity-50">or compose a new one with AI →</p>
+              <p className="font-black text-base text-foreground/60 tracking-tight">
+                {leftTab === "inbox" ? "Select an email to read" : "Select a draft"}
+              </p>
+              <p className="text-[12px] mt-1 opacity-50">
+                {leftTab === "inbox" ? "or compose a new one with AI →" : "or compose a new one with AI →"}
+              </p>
             </div>
           </div>
         )}
       </div>
+
+      {/* Right panel — Compose */}
       <div className="w-[360px] shrink-0 overflow-hidden border-l border-border">
-        <ComposePanel onSaved={d => setSelectedId(d.id)} />
+        <ComposePanel onSaved={d => { setSelectedDraftId(d.id); setLeftTab("drafts"); }}
+          replyTo={replyTo} onClearReply={() => setReplyTo(null)} />
       </div>
     </div>
   );

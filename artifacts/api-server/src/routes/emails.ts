@@ -4,6 +4,7 @@ import { db, emailDraftsTable } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { serialize } from "../lib/serialize";
 import { sendMail, isSmtpConfigured } from "../lib/mailer";
+import { fetchInbox, fetchEmailBody, isImapConfigured, invalidateInboxCache } from "../lib/imap";
 import {
   CreateEmailDraftBody, GenerateEmailDraftBody,
   GenerateEmailDraftResponse, SummarizeEmailBody,
@@ -19,12 +20,57 @@ router.get("/emails", async (_req, res): Promise<void> => {
   res.json(ListEmailDraftsResponse.parse(serialize(drafts)));
 });
 
-/* ── SMTP status ── */
+/* ── SMTP + IMAP status ── */
 router.get("/emails/smtp-status", (_req, res): void => {
   res.json({
     configured: isSmtpConfigured(),
+    imapConfigured: isImapConfigured(),
     from: isSmtpConfigured() ? process.env.SMTP_USER : null,
   });
+});
+
+/* ── INBOX: list ── */
+router.get("/emails/inbox", async (req, res): Promise<void> => {
+  if (!isImapConfigured()) {
+    res.json({ emails: [], unread: 0, configured: false });
+    return;
+  }
+  try {
+    const forceRefresh = req.query.refresh === "1";
+    const emails = await fetchInbox(40, forceRefresh);
+    const unread = emails.filter(e => !e.seen).length;
+    res.json({ emails, unread, configured: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "IMAP connection failed" });
+  }
+});
+
+/* ── INBOX: full email body ── */
+router.get("/emails/inbox/:uid", async (req, res): Promise<void> => {
+  const uid = parseInt(req.params.uid ?? "");
+  if (isNaN(uid)) { res.status(400).json({ error: "Invalid UID" }); return; }
+  try {
+    const detail = await fetchEmailBody(uid);
+    res.json(detail);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "Failed to fetch email" });
+  }
+});
+
+/* ── INBOX: send reply ── */
+router.post("/emails/reply", async (req, res): Promise<void> => {
+  const { to, subject, body } = req.body as { to?: string; subject?: string; body?: string };
+  if (!to || !subject || !body) {
+    res.status(400).json({ error: "Missing to, subject, body" });
+    return;
+  }
+  try {
+    const messageId = await sendMail({ to, subject, body });
+    invalidateInboxCache();
+    res.json({ success: true, messageId });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "Send failed" });
+  }
 });
 
 /* ── Generate draft with AI ── */
@@ -105,7 +151,6 @@ router.post("/emails/send", async (req, res): Promise<void> => {
   }
   try {
     const messageId = await sendMail({ to, subject, body });
-    // Save as a sent draft
     await db.insert(emailDraftsTable).values({
       subject, body, recipient: to, context: null, status: "sent",
     }).catch(() => {});
