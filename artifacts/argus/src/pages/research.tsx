@@ -10,6 +10,7 @@ import {
   Globe, Link2, Copy, Check, Loader2, RotateCcw, Pencil, Save,
   BookMarked, MessageSquare, StickyNote, Wand2, ChevronDown,
   ChevronRight, Search, Upload, AlignLeft, Send, Eraser,
+  Image as ImageIcon, FileUp, File as FileIcon, Eye,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -37,19 +38,27 @@ const NB_EMOJIS = ["📓","📔","📒","📕","📗","📘","📙","🗒️","�
 
 /* ─── API helpers ─── */
 const api = {
-  getNotebooks: ()                   => fetch(`${BASE}/api/notebooks`).then(r=>r.json()),
-  getNotebook:  (id:number)          => fetch(`${BASE}/api/notebooks/${id}`).then(r=>r.json()),
-  createNotebook:(body:any)          => fetch(`${BASE}/api/notebooks`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(r=>r.json()),
-  updateNotebook:(id:number,body:any)=> fetch(`${BASE}/api/notebooks/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(r=>r.json()),
-  deleteNotebook:(id:number)         => fetch(`${BASE}/api/notebooks/${id}`,{method:"DELETE"}),
-  addSource:    (id:number,body:any) => fetch(`${BASE}/api/notebooks/${id}/sources`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(r=>r.json()),
-  deleteSource: (id:number,sid:number)=> fetch(`${BASE}/api/notebooks/${id}/sources/${sid}`,{method:"DELETE"}),
-  createNote:   (id:number,content:string)=> fetch(`${BASE}/api/notebooks/${id}/notes`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content})}).then(r=>r.json()),
-  updateNote:   (id:number,nid:number,content:string)=>fetch(`${BASE}/api/notebooks/${id}/notes/${nid}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({content})}).then(r=>r.json()),
-  deleteNote:   (id:number,nid:number)=>fetch(`${BASE}/api/notebooks/${id}/notes/${nid}`,{method:"DELETE"}),
-  chat:         (id:number,message:string)=>fetch(`${BASE}/api/notebooks/${id}/chat`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message})}).then(r=>r.json()),
-  clearChat:    (id:number)          => fetch(`${BASE}/api/notebooks/${id}/chat`,{method:"DELETE"}),
-  studio:       (id:number,type:string)=>fetch(`${BASE}/api/notebooks/${id}/studio`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type})}).then(r=>r.json()),
+  getNotebooks:  ()                    => fetch(`${BASE}/api/notebooks`).then(r=>r.json()),
+  getNotebook:   (id:number)           => fetch(`${BASE}/api/notebooks/${id}`).then(r=>r.json()),
+  createNotebook:(body:any)            => fetch(`${BASE}/api/notebooks`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(r=>r.json()),
+  updateNotebook:(id:number,body:any)  => fetch(`${BASE}/api/notebooks/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(r=>r.json()),
+  deleteNotebook:(id:number)           => fetch(`${BASE}/api/notebooks/${id}`,{method:"DELETE"}),
+  addSource:     (id:number,body:any)  => fetch(`${BASE}/api/notebooks/${id}/sources`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(r=>r.json()),
+  uploadSource:  async (id:number,file:File,title?:string) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (title) form.append("title", title);
+    const r = await fetch(`${BASE}/api/notebooks/${id}/sources/upload`,{method:"POST",body:form});
+    if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.error || "Upload failed"); }
+    return r.json();
+  },
+  deleteSource:  (id:number,sid:number)=> fetch(`${BASE}/api/notebooks/${id}/sources/${sid}`,{method:"DELETE"}),
+  createNote:    (id:number,content:string)=> fetch(`${BASE}/api/notebooks/${id}/notes`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({content})}).then(r=>r.json()),
+  updateNote:    (id:number,nid:number,content:string)=>fetch(`${BASE}/api/notebooks/${id}/notes/${nid}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({content})}).then(r=>r.json()),
+  deleteNote:    (id:number,nid:number)=>fetch(`${BASE}/api/notebooks/${id}/notes/${nid}`,{method:"DELETE"}),
+  chat:          (id:number,message:string)=>fetch(`${BASE}/api/notebooks/${id}/chat`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message})}).then(r=>r.json()),
+  clearChat:     (id:number)           => fetch(`${BASE}/api/notebooks/${id}/chat`,{method:"DELETE"}),
+  studio:        (id:number,type:string)=>fetch(`${BASE}/api/notebooks/${id}/studio`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type})}).then(r=>r.json()),
 };
 
 /* ─── Hooks ─── */
@@ -71,23 +80,99 @@ function CopyBtn({ text }: { text: string }) {
   );
 }
 
+/* ─── Helpers ─── */
+type AddTab = "file" | "text" | "url";
+
+interface UploadItem {
+  id: string;
+  file: File;
+  title: string;
+  status: "pending" | "processing" | "done" | "error";
+  error?: string;
+}
+
+function srcTypeIcon(type: string) {
+  if (type === "image") return <ImageIcon className="w-3 h-3 text-blue-400"/>;
+  if (type === "pdf")   return <FileText  className="w-3 h-3 text-red-400"/>;
+  return                       <AlignLeft className="w-3 h-3 text-muted-foreground"/>;
+}
+
+function srcTypeBadge(type: string) {
+  if (type === "image") return "bg-blue-500/10 text-blue-400 border-blue-500/20";
+  if (type === "pdf")   return "bg-red-500/10 text-red-400 border-red-500/20";
+  return "bg-muted/50 text-muted-foreground border-border/40";
+}
+
+function srcTypeLabel(type: string) {
+  if (type === "image") return "Image";
+  if (type === "pdf")   return "PDF";
+  if (type === "url")   return "Web";
+  return "Text";
+}
+
 /* ══════════════════════════════════════════
    SOURCES PANEL
 ══════════════════════════════════════════ */
 function SourcesPanel({ notebook, onRefresh }: { notebook: Notebook; onRefresh:()=>void }) {
-  const [addMode, setAddMode] = useState<"text"|"url"|null>(null);
-  const [title, setTitle]   = useState("");
-  const [content, setContent] = useState("");
-  const [url, setUrl]       = useState("");
+  const [tab, setTab]           = useState<AddTab>("file");
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [title, setTitle]       = useState("");
+  const [content, setContent]   = useState("");
+  const [url, setUrl]           = useState("");
   const [expandedId, setExpandedId] = useState<number|null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]     = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploads, setUploads]   = useState<UploadItem[]>([]);
+  const fileInputRef            = useRef<HTMLInputElement>(null);
+  const dropRef                 = useRef<HTMLDivElement>(null);
+  const sources = notebook.sources ?? [];
 
-  const handleAdd = async () => {
+  /* ── Text/URL add ── */
+  const handleAddText = async () => {
     if (!title.trim() || !content.trim()) return;
     setSaving(true);
-    await api.addSource(notebook.id, { title: title.trim(), content: content.trim(), type: addMode ?? "text", url: url||undefined });
-    setTitle(""); setContent(""); setUrl(""); setAddMode(null);
+    await api.addSource(notebook.id, { title: title.trim(), content: content.trim(), type: tab === "url" ? "url" : "text", url: url || undefined });
+    setTitle(""); setContent(""); setUrl(""); setPanelOpen(false);
     onRefresh(); setSaving(false);
+  };
+
+  /* ── File processing ── */
+  const processFiles = useCallback(async (files: File[]) => {
+    const supported = files.filter(f =>
+      f.type.startsWith("image/") || f.type === "application/pdf" || f.type.startsWith("text/")
+    );
+    if (!supported.length) return;
+
+    const items: UploadItem[] = supported.map(f => ({
+      id: Math.random().toString(36).slice(2),
+      file: f,
+      title: f.name.replace(/\.[^.]+$/, ""),
+      status: "pending",
+    }));
+    setUploads(prev => [...prev, ...items]);
+    setPanelOpen(true);
+    setTab("file");
+
+    for (const item of items) {
+      setUploads(prev => prev.map(u => u.id === item.id ? { ...u, status: "processing" } : u));
+      try {
+        await api.uploadSource(notebook.id, item.file, item.title);
+        setUploads(prev => prev.map(u => u.id === item.id ? { ...u, status: "done" } : u));
+        onRefresh();
+      } catch (e: any) {
+        setUploads(prev => prev.map(u => u.id === item.id ? { ...u, status: "error", error: e.message } : u));
+      }
+    }
+    // Clean up done items after a moment
+    setTimeout(() => setUploads(prev => prev.filter(u => u.status !== "done")), 3000);
+  }, [notebook.id, onRefresh]);
+
+  /* ── Drag & drop ── */
+  const onDragOver  = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
+  const onDragLeave = (e: React.DragEvent) => { if (!dropRef.current?.contains(e.relatedTarget as Node)) setIsDragging(false); };
+  const onDrop      = (e: React.DragEvent) => {
+    e.preventDefault(); setIsDragging(false);
+    processFiles(Array.from(e.dataTransfer.files));
   };
 
   const handleDelete = async (sid: number) => {
@@ -95,85 +180,200 @@ function SourcesPanel({ notebook, onRefresh }: { notebook: Notebook; onRefresh:(
     onRefresh();
   };
 
-  const sources = notebook.sources ?? [];
+  const TABS: { id: AddTab; icon: React.ReactNode; label: string }[] = [
+    { id: "file", icon: <FileUp className="w-3.5 h-3.5"/>, label: "File" },
+    { id: "text", icon: <AlignLeft className="w-3.5 h-3.5"/>, label: "Text" },
+    { id: "url",  icon: <Link2 className="w-3.5 h-3.5"/>,    label: "URL" },
+  ];
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col" ref={dropRef} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-primary/10 border-2 border-dashed border-primary/50 rounded-xl m-1 backdrop-blur-sm animate-in fade-in duration-150 pointer-events-none">
+          <FileUp className="w-10 h-10 text-primary mb-2"/>
+          <p className="text-sm font-semibold text-primary">Drop files here</p>
+          <p className="text-[11px] text-primary/70 mt-1">Images, PDFs, or text files</p>
+        </div>
+      )}
+
+      {/* Header */}
       <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
         <div>
           <p className="text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">Sources</p>
           <p className="text-[11px] text-muted-foreground/60 mt-0.5">{sources.length} added</p>
         </div>
-        <div className="flex gap-1">
-          <button onClick={()=>setAddMode(addMode==="text"?null:"text")} title="Paste text"
-            className={`p-1.5 rounded-lg transition-all ${addMode==="text"?"bg-primary/10 text-primary":"text-muted-foreground hover:bg-muted"}`}>
-            <AlignLeft className="w-3.5 h-3.5"/>
-          </button>
-          <button onClick={()=>setAddMode(addMode==="url"?null:"url")} title="Add URL"
-            className={`p-1.5 rounded-lg transition-all ${addMode==="url"?"bg-primary/10 text-primary":"text-muted-foreground hover:bg-muted"}`}>
-            <Link2 className="w-3.5 h-3.5"/>
-          </button>
-        </div>
+        <button
+          onClick={() => setPanelOpen(p => !p)}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all
+            ${panelOpen ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
+          <Plus className="w-3.5 h-3.5"/> Add
+        </button>
       </div>
 
-      {/* Add form */}
-      {addMode && (
-        <div className="px-3 py-3 border-b border-border bg-muted/20 shrink-0 space-y-2 animate-in slide-in-from-top-2 duration-150">
-          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Source title…"
-            className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"/>
-          {addMode==="url" && (
-            <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="URL (optional)…"
-              className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"/>
-          )}
-          <textarea value={content} onChange={e=>setContent(e.target.value)}
-            placeholder={addMode==="url"?"Paste the page content here…":"Paste or type your source content…"}
-            rows={5} className="w-full px-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary/40 resize-none"/>
-          <div className="flex gap-2">
-            <button onClick={()=>{setAddMode(null);setTitle("");setContent("");setUrl("");}}
-              className="flex-1 py-1.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:bg-muted transition-all">
-              Cancel
-            </button>
-            <button onClick={handleAdd} disabled={!title.trim()||!content.trim()||saving}
-              className="flex-1 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-40 hover:bg-primary/90 transition-all flex items-center justify-center gap-1.5">
-              {saving ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3"/>}
-              Add Source
-            </button>
+      {/* Add panel */}
+      {panelOpen && (
+        <div className="px-3 pt-3 pb-2 border-b border-border bg-muted/10 shrink-0 space-y-2 animate-in slide-in-from-top-2 duration-150">
+          {/* Tab switcher */}
+          <div className="flex gap-1 bg-muted/40 rounded-lg p-0.5">
+            {TABS.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-semibold transition-all
+                  ${tab === t.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+                {t.icon}{t.label}
+              </button>
+            ))}
           </div>
+
+          {/* File upload tab */}
+          {tab === "file" && (
+            <div className="space-y-2">
+              {/* Upload progress items */}
+              {uploads.length > 0 && (
+                <div className="space-y-1">
+                  {uploads.map(u => (
+                    <div key={u.id} className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border text-[11px]
+                      ${u.status === "error" ? "border-red-400/30 bg-red-500/5" :
+                        u.status === "done"  ? "border-green-400/30 bg-green-500/5" :
+                                               "border-border/60 bg-muted/20"}`}>
+                      {u.status === "processing" ? <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0"/> :
+                       u.status === "done"        ? <Check    className="w-3 h-3 text-green-500 shrink-0"/> :
+                       u.status === "error"       ? <X        className="w-3 h-3 text-red-400 shrink-0"/> :
+                                                    <FileIcon  className="w-3 h-3 text-muted-foreground shrink-0"/>}
+                      <span className="flex-1 truncate text-muted-foreground">
+                        {u.status === "processing" ? `Extracting from ${u.title}…` :
+                         u.status === "done"        ? `${u.title} added` :
+                         u.status === "error"       ? u.error :
+                                                      u.title}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Drop zone */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-border/60 rounded-xl py-5 px-3 flex flex-col items-center gap-2 text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-primary/5 transition-all group">
+                <div className="flex items-center gap-3">
+                  <ImageIcon className="w-5 h-5 text-blue-400/70 group-hover:text-blue-400"/>
+                  <FileText  className="w-5 h-5 text-red-400/70 group-hover:text-red-400"/>
+                  <FileIcon  className="w-5 h-5 text-muted-foreground/50 group-hover:text-muted-foreground"/>
+                </div>
+                <div className="text-center">
+                  <p className="text-[12px] font-semibold">Click to browse or drag & drop</p>
+                  <p className="text-[10px] opacity-60 mt-0.5">Images (JPG, PNG, GIF, WebP) · PDF · Text</p>
+                  <p className="text-[10px] opacity-50 mt-0.5">Up to 20 MB per file</p>
+                </div>
+              </button>
+              <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,text/*"
+                className="hidden" onChange={e => { if (e.target.files) processFiles(Array.from(e.target.files)); e.target.value=""; }}/>
+
+              {/* Supported format pills */}
+              <div className="flex flex-wrap gap-1">
+                {[["🖼️","Screenshots"],["📄","PDFs"],["📝","Text files"],["🗒️","Notes"]].map(([icon,label])=>(
+                  <span key={label} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted/50 border border-border/40 text-[10px] text-muted-foreground">
+                    {icon} {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Text tab */}
+          {tab === "text" && (
+            <div className="space-y-2">
+              <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Source title…"
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-[13px] focus:outline-none focus:ring-1 focus:ring-primary/40"/>
+              <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="Paste or type your source content…"
+                rows={5} style={{resize:"none"}}
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-[13px] focus:outline-none focus:ring-1 focus:ring-primary/40"/>
+              <div className="flex gap-2">
+                <button onClick={()=>{ setPanelOpen(false); setTitle(""); setContent(""); }}
+                  className="flex-1 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:bg-muted transition-all">Cancel</button>
+                <button onClick={handleAddText} disabled={!title.trim()||!content.trim()||saving}
+                  className="flex-1 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-40 hover:bg-primary/90 transition-all flex items-center justify-center gap-1">
+                  {saving ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3"/>} Add
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* URL tab */}
+          {tab === "url" && (
+            <div className="space-y-2">
+              <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Source title…"
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-[13px] focus:outline-none focus:ring-1 focus:ring-primary/40"/>
+              <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="URL (for reference)…"
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-[13px] focus:outline-none focus:ring-1 focus:ring-primary/40"/>
+              <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="Paste the page content here…"
+                rows={4} style={{resize:"none"}}
+                className="w-full px-3 py-2 rounded-lg border border-input bg-background text-[13px] focus:outline-none focus:ring-1 focus:ring-primary/40"/>
+              <div className="flex gap-2">
+                <button onClick={()=>{ setPanelOpen(false); setTitle(""); setContent(""); setUrl(""); }}
+                  className="flex-1 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:bg-muted transition-all">Cancel</button>
+                <button onClick={handleAddText} disabled={!title.trim()||!content.trim()||saving}
+                  className="flex-1 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold disabled:opacity-40 hover:bg-primary/90 transition-all flex items-center justify-center gap-1">
+                  {saving ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3"/>} Add
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
+      {/* Sources list */}
       <ScrollArea className="flex-1">
         {sources.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 px-4 text-center text-muted-foreground">
-            <Upload className="w-8 h-8 mb-3 opacity-20"/>
+            <div className="flex items-center gap-2 mb-3 opacity-30">
+              <ImageIcon className="w-6 h-6 text-blue-400"/>
+              <FileText  className="w-6 h-6 text-red-400"/>
+              <FileIcon  className="w-5 h-5"/>
+            </div>
             <p className="text-sm font-medium">No sources yet</p>
-            <p className="text-[11px] mt-1 opacity-60">Add text or paste a URL above to ground your AI chat</p>
+            <p className="text-[11px] mt-1 opacity-60 max-w-[160px]">Upload images, PDFs, or paste text to ground your AI chat</p>
+            <button onClick={() => { setPanelOpen(true); setTab("file"); }}
+              className="mt-3 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-[11px] font-semibold hover:bg-primary/20 transition-all flex items-center gap-1.5">
+              <FileUp className="w-3 h-3"/> Upload file
+            </button>
           </div>
         ) : (
           <div className="px-2 py-2 space-y-1">
             {sources.map((src, i) => (
-              <div key={src.id} className="rounded-xl border border-border/60 bg-card overflow-hidden">
+              <div key={src.id} className="rounded-xl border border-border/60 bg-card overflow-hidden group/src">
                 <div className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors"
-                  onClick={()=>setExpandedId(expandedId===src.id?null:src.id)}>
+                  onClick={() => setExpandedId(expandedId === src.id ? null : src.id)}>
+                  {/* Source number badge */}
                   <div className="w-5 h-5 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] font-bold text-primary">{i+1}</span>
+                    <span className="text-[10px] font-bold text-primary">{i + 1}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium truncate">{src.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{src.content.length.toLocaleString()} chars</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-[13px] font-medium truncate">{src.title}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className={`inline-flex items-center gap-0.5 px-1.5 py-px rounded-full border text-[9px] font-semibold uppercase tracking-wide ${srcTypeBadge(src.type)}`}>
+                        {srcTypeIcon(src.type)} {srcTypeLabel(src.type)}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/50">{(src.content.length / 1000).toFixed(1)}k chars</span>
+                    </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={e=>{e.stopPropagation();handleDelete(src.id);}}
-                      className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all">
+                    <button onClick={e => { e.stopPropagation(); handleDelete(src.id); }}
+                      className="p-1 rounded opacity-0 group-hover/src:opacity-100 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all">
                       <Trash2 className="w-3 h-3"/>
                     </button>
-                    {expandedId===src.id ? <ChevronDown className="w-3 h-3 text-muted-foreground"/> : <ChevronRight className="w-3 h-3 text-muted-foreground"/>}
+                    {expandedId === src.id
+                      ? <ChevronDown  className="w-3.5 h-3.5 text-muted-foreground"/>
+                      : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground"/>}
                   </div>
                 </div>
-                {expandedId===src.id && (
-                  <div className="px-3 pb-3 border-t border-border/40 animate-in slide-in-from-top-1 duration-100">
-                    <ScrollArea className="h-36 mt-2">
-                      <p className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap">{src.content}</p>
+                {expandedId === src.id && (
+                  <div className="border-t border-border/40 animate-in slide-in-from-top-1 duration-100">
+                    <ScrollArea className="h-40">
+                      <p className="px-3 py-3 text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap">{src.content}</p>
                     </ScrollArea>
                   </div>
                 )}

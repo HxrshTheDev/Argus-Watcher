@@ -6,6 +6,17 @@ import {
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { serialize } from "../lib/serialize";
 import { z } from "zod";
+import multer from "multer";
+import pdfParse from "pdf-parse";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
+  fileFilter: (_req, file, cb) => {
+    const ok = /^(image\/(jpeg|jpg|png|gif|webp)|application\/pdf|text\/.*)$/.test(file.mimetype);
+    cb(null, ok);
+  },
+});
 
 const router: IRouter = Router();
 
@@ -93,6 +104,116 @@ router.delete("/notebooks/:id/sources/:sourceId", async (req, res): Promise<void
   await db.delete(notebookSources).where(eq(notebookSources.id, sourceId));
   res.sendStatus(204);
 });
+
+/* ── Upload file source (image / PDF / text) ── */
+router.post(
+  "/notebooks/:id/sources/upload",
+  upload.single("file"),
+  async (req, res): Promise<void> => {
+    const nbId = Number(req.params.id);
+    if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
+
+    const { originalname, mimetype, buffer } = req.file;
+    let title = (req.body?.title as string | undefined)?.trim() || originalname;
+    let content = "";
+    let sourceType = "text";
+
+    try {
+      /* ── Image: use OpenAI Vision to extract text + describe ── */
+      if (mimetype.startsWith("image/")) {
+        sourceType = "image";
+        const base64 = buffer.toString("base64");
+        const dataUrl = `data:${mimetype};base64,${base64}`;
+
+        const vision = await openai.chat.completions.create({
+          model: "gpt-4.1",
+          max_completion_tokens: 4096,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `You are processing a screenshot or image for a research notebook.
+
+Please do TWO things:
+1. Extract ALL visible text from the image exactly as written (preserve structure, headings, bullets, code, etc.)
+2. After the extracted text, add a section "## Visual Description" that describes diagrams, charts, screenshots, UI elements, or any non-text visual content.
+
+Be thorough and complete. Include everything visible.`,
+                },
+                { type: "image_url", image_url: { url: dataUrl, detail: "high" } },
+              ],
+            },
+          ],
+        });
+
+        content = vision.choices[0]?.message?.content ?? "";
+        if (!content) { res.status(500).json({ error: "Could not extract content from image" }); return; }
+
+      /* ── PDF: extract text with pdf-parse ── */
+      } else if (mimetype === "application/pdf") {
+        sourceType = "pdf";
+        const parsed = await pdfParse(buffer);
+        content = parsed.text?.trim() ?? "";
+
+        if (content.length < 50) {
+          // Sparse PDF (scanned) — OCR via Vision on first page representation
+          const base64 = buffer.toString("base64");
+          const vision = await openai.chat.completions.create({
+            model: "gpt-4.1",
+            max_completion_tokens: 4096,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: "This appears to be a scanned PDF. Extract all visible text and describe the content as thoroughly as possible." },
+                  { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}`, detail: "high" } },
+                ],
+              },
+            ],
+          });
+          content = vision.choices[0]?.message?.content ?? parsed.text ?? "";
+        }
+
+        if (!content) { res.status(500).json({ error: "Could not extract text from PDF" }); return; }
+
+        // Enrich: generate a structured summary
+        const summary = await openai.chat.completions.create({
+          model: "gpt-4.1",
+          max_completion_tokens: 2048,
+          messages: [
+            {
+              role: "system",
+              content: "You are a document analyst. Given raw PDF text, add a '## Document Summary' section at the top with: document type, main topic, key points (bullets), and page count if detectable. Then include the full extracted text below.",
+            },
+            { role: "user", content: content.slice(0, 12000) },
+          ],
+        });
+        const enriched = summary.choices[0]?.message?.content;
+        if (enriched) content = enriched;
+
+      /* ── Plain text ── */
+      } else {
+        sourceType = "text";
+        content = buffer.toString("utf-8");
+      }
+
+      const [src] = await db.insert(notebookSources).values({
+        notebookId: nbId,
+        title,
+        content,
+        type: sourceType,
+      }).returning();
+
+      await db.update(notebooks).set({ updatedAt: new Date() }).where(eq(notebooks.id, nbId));
+      res.status(201).json(serialize(src));
+
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message ?? "Upload processing failed" });
+    }
+  }
+);
 
 /* ── List notes ── */
 router.get("/notebooks/:id/notes", async (req, res): Promise<void> => {
