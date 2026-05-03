@@ -143,12 +143,11 @@ const StatCard = memo(function StatCard({ label, value, sub, icon: Icon, gradien
     href ? <Link href={href} className="block">{children}</Link> : <div>{children}</div>;
   return (
     <Wrapper>
-      <div className={`relative overflow-hidden rounded-2xl p-4 transition-all duration-200 hover:scale-[1.02] hover:-translate-y-0.5 cursor-pointer group ${alert ? "glass-card-alert" : "glass-card"}`}>
-        <div className={`absolute -top-8 -right-8 w-24 h-24 rounded-full bg-gradient-to-br ${gradient} opacity-[0.18] dark:opacity-[0.14] blur-2xl group-hover:opacity-[0.28] dark:group-hover:opacity-[0.22] transition-opacity`} />
+      <div className={`relative overflow-hidden rounded-2xl p-4 transition-transform duration-200 hover:scale-[1.02] hover:-translate-y-0.5 cursor-pointer group ${alert ? "glass-card-alert" : "glass-card"}`}>
         <div className="relative">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40 dark:text-muted-foreground/70">{label}</span>
-            <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg ${glow ?? ""} group-hover:scale-110 transition-transform relative overflow-hidden`}>
+            <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md ${glow ?? ""} group-hover:scale-110 transition-transform relative overflow-hidden`}>
               <Icon className="w-4 h-4 text-white relative z-10" />
               <div className="absolute inset-0 bg-gradient-to-b from-white/25 to-transparent" />
             </div>
@@ -330,9 +329,8 @@ export default function Dashboard() {
                   const Icon = m.icon;
                   return (
                     <Link key={m.url} href={m.url}
-                      className="glass-card group relative overflow-hidden flex items-center gap-3 p-3.5 rounded-2xl transition-all duration-200 hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]">
-                      <div className={`absolute -top-3 -right-3 w-14 h-14 rounded-full bg-gradient-to-br ${m.gradient} opacity-[0.12] dark:opacity-[0.10] blur-xl group-hover:opacity-[0.22] transition-opacity`} />
-                      <div className={`relative w-10 h-10 rounded-xl bg-gradient-to-br ${m.gradient} flex items-center justify-center shadow-lg ${m.glow} shrink-0 group-hover:scale-110 transition-transform duration-200 overflow-hidden`}>
+                      className="glass-card group relative overflow-hidden flex items-center gap-3 p-3.5 rounded-2xl transition-transform duration-200 hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98]">
+                      <div className={`relative w-10 h-10 rounded-xl bg-gradient-to-br ${m.gradient} flex items-center justify-center shadow-md ${m.glow} shrink-0 group-hover:scale-110 transition-transform duration-200 overflow-hidden`}>
                         <Icon className="w-5 h-5 text-white relative z-10" />
                         <div className="absolute inset-0 bg-gradient-to-b from-white/25 to-transparent" />
                       </div>
