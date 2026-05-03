@@ -187,7 +187,7 @@ function SourcesPanel({ notebook, onRefresh }: { notebook: Notebook; onRefresh:(
   ];
 
   return (
-    <div className="h-full flex flex-col" ref={dropRef} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+    <div className="h-full flex flex-col relative" ref={dropRef} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
 
       {/* Drag overlay */}
       {isDragging && (

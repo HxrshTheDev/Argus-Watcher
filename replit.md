@@ -75,6 +75,7 @@ All routes are prefixed with `/api`:
 - `GET /api/activity` — recent activity feed
 - `GET/POST /api/notebooks` — list/create notebooks
 - `GET/PUT/DELETE /api/notebooks/:id` — notebook CRUD (returns with sources/notes/chats)
+- `POST /api/notebooks/:id/sources/upload` — upload file source (image/PDF/text) with AI extraction
 - `POST/DELETE /api/notebooks/:id/sources` — add/remove sources
 - `GET/POST/PUT/DELETE /api/notebooks/:id/notes` — note CRUD
 - `POST /api/notebooks/:id/chat` — grounded AI chat (with citations)

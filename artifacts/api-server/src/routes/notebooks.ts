@@ -7,7 +7,10 @@ import { openai } from "@workspace/integrations-openai-ai-server";
 import { serialize } from "../lib/serialize";
 import { z } from "zod";
 import multer from "multer";
-import pdfParse from "pdf-parse";
+import { createRequire } from "node:module";
+const _require = createRequire(import.meta.url);
+// pdf-parse is CJS-only — must load via require in ESM context
+const pdfParse: (buf: Buffer) => Promise<{ text: string; numpages: number; info: unknown }> = _require("pdf-parse");
 
 const upload = multer({
   storage: multer.memoryStorage(),
