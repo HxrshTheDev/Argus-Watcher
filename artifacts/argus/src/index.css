@@ -66,60 +66,60 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* ── Light mode · iOS-inspired ──────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   LIGHT MODE — Refined professional slate / Linear-inspired
+   ══════════════════════════════════════════════════════════ */
 :root {
   --button-outline: rgba(0,0,0,.07);
   --badge-outline: rgba(0,0,0,.04);
-  --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0,0,0,.015);
-  --elevate-2: rgba(0,0,0,.05);
 
-  /* iOS system background layers */
-  --background: 240 5% 96%;       /* #F2F2F7 — iOS grouped bg */
-  --foreground: 220 25% 9%;        /* Near-black text */
-  --border: 240 8% 88%;
-  --input: 240 8% 88%;
-  --ring: 235 86% 62%;
+  /* Page background — light cool-gray, not stark white */
+  --background: 210 18% 96%;
+  --foreground: 215 28% 10%;
 
-  /* Cards = white surfaces (iOS card) */
+  /* Cards — pure white surface */
   --card: 0 0% 100%;
-  --card-foreground: 220 25% 9%;
-  --card-border: 240 8% 90%;
+  --card-foreground: 215 28% 10%;
+  --card-border: 214 16% 90%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 220 25% 9%;
-  --popover-border: 240 8% 88%;
+  --popover-foreground: 215 28% 10%;
+  --popover-border: 214 16% 88%;
 
-  /* Apple indigo-blue */
-  --primary: 235 86% 62%;
+  --border: 214 16% 88%;
+  --input: 214 16% 90%;
+  --ring: 217 91% 56%;
+
+  /* Primary — Linear/Vercel-quality blue */
+  --primary: 217 91% 56%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 240 6% 92%;
-  --secondary-foreground: 220 25% 9%;
+  --secondary: 213 14% 93%;
+  --secondary-foreground: 215 28% 10%;
 
-  --muted: 240 6% 93%;
-  --muted-foreground: 220 10% 46%;
+  --muted: 213 14% 93%;
+  --muted-foreground: 215 16% 44%;
 
-  --accent: 240 6% 93%;
-  --accent-foreground: 220 25% 9%;
+  --accent: 213 14% 93%;
+  --accent-foreground: 215 28% 10%;
 
-  --destructive: 0 84% 58%;
+  --destructive: 0 82% 57%;
   --destructive-foreground: 0 0% 100%;
 
-  /* Sidebar = white on light, like Apple */
+  /* Sidebar — pure white, clean boundary */
   --sidebar: 0 0% 100%;
-  --sidebar-foreground: 220 25% 9%;
-  --sidebar-border: 240 8% 90%;
-  --sidebar-primary: 235 86% 62%;
+  --sidebar-foreground: 215 25% 12%;
+  --sidebar-border: 214 14% 91%;
+  --sidebar-primary: 217 91% 56%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 240 6% 93%;
-  --sidebar-accent-foreground: 220 25% 9%;
-  --sidebar-ring: 235 86% 62%;
+  --sidebar-accent: 213 12% 93%;
+  --sidebar-accent-foreground: 215 25% 12%;
+  --sidebar-ring: 217 91% 56%;
 
-  --chart-1: 235 86% 62%;
-  --chart-2: 160 60% 40%;
-  --chart-3: 30 80% 52%;
-  --chart-4: 280 65% 58%;
+  --chart-1: 217 91% 56%;
+  --chart-2: 160 60% 38%;
+  --chart-3: 30 80% 50%;
+  --chart-4: 280 65% 56%;
   --chart-5: 340 75% 52%;
 
   --app-font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
@@ -128,65 +128,66 @@
   --radius: 0.75rem;
 }
 
-/* ── Dark mode · OLED premium black ────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   DARK MODE — True professional dark / Things 3 × Linear
+   ══════════════════════════════════════════════════════════ */
 .dark {
   --button-outline: rgba(255,255,255,.07);
   --badge-outline: rgba(255,255,255,.04);
-  --opaque-button-border-intensity: 10;
-  --elevate-1: rgba(255,255,255,.018);
-  --elevate-2: rgba(255,255,255,.04);
 
-  /* True near-black — OLED-ready */
-  --background: 220 16% 5%;
-  --foreground: 210 30% 94%;
+  /* Deep neutral slate — no blue bleed */
+  --background: 220 14% 6%;
+  --foreground: 210 16% 92%;
 
-  /* iOS dark-mode card: #1C1C1E equivalent */
-  --card: 220 14% 8%;
-  --card-foreground: 210 30% 94%;
-  --card-border: 220 14% 13%;
+  /* Cards — subtly elevated above bg */
+  --card: 220 12% 10%;
+  --card-foreground: 210 16% 92%;
+  --card-border: 220 12% 16%;
 
-  --popover: 220 14% 9%;
-  --popover-foreground: 210 30% 94%;
-  --popover-border: 220 14% 14%;
+  --popover: 220 12% 11%;
+  --popover-foreground: 210 16% 92%;
+  --popover-border: 220 12% 18%;
 
-  --border: 220 14% 11%;
-  --input: 220 14% 10%;
-  --ring: 235 86% 65%;
+  --border: 220 12% 15%;
+  --input: 220 12% 13%;
+  --ring: 217 91% 62%;
 
-  /* Indigo — Apple-compatible */
-  --primary: 235 86% 65%;
+  /* Primary — vivid clean blue, same hue as light */
+  --primary: 217 91% 62%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 220 14% 10%;
-  --secondary-foreground: 210 30% 94%;
+  --secondary: 220 12% 12%;
+  --secondary-foreground: 210 16% 92%;
 
-  --muted: 220 14% 10%;
-  --muted-foreground: 215 12% 50%;
+  --muted: 220 12% 12%;
+  --muted-foreground: 220 10% 50%;
 
-  --accent: 220 14% 10%;
-  --accent-foreground: 210 30% 94%;
+  --accent: 220 12% 13%;
+  --accent-foreground: 210 16% 92%;
 
-  --destructive: 0 84% 60%;
+  --destructive: 0 82% 60%;
   --destructive-foreground: 0 0% 100%;
 
-  /* Sidebar — even darker than card */
-  --sidebar: 220 18% 3.5%;
-  --sidebar-foreground: 210 28% 90%;
-  --sidebar-border: 220 14% 9%;
-  --sidebar-primary: 235 86% 65%;
+  /* Sidebar — darker than card, anchoring the layout */
+  --sidebar: 220 16% 4%;
+  --sidebar-foreground: 210 14% 88%;
+  --sidebar-border: 220 12% 10%;
+  --sidebar-primary: 217 91% 62%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 14% 9%;
-  --sidebar-accent-foreground: 210 28% 90%;
-  --sidebar-ring: 235 86% 65%;
+  --sidebar-accent: 220 12% 9%;
+  --sidebar-accent-foreground: 210 14% 88%;
+  --sidebar-ring: 217 91% 62%;
 
-  --chart-1: 235 86% 65%;
-  --chart-2: 160 60% 45%;
-  --chart-3: 30 80% 55%;
-  --chart-4: 280 65% 60%;
-  --chart-5: 340 75% 55%;
+  --chart-1: 217 91% 62%;
+  --chart-2: 160 58% 44%;
+  --chart-3: 32 80% 54%;
+  --chart-4: 280 62% 60%;
+  --chart-5: 340 72% 55%;
 }
 
-/* ── Base layer ─────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   BASE LAYER
+   ══════════════════════════════════════════════════════════ */
 @layer base {
   * { @apply border-border; }
 
@@ -202,94 +203,109 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.012em;
   }
 
-  /* Thin, refined scrollbar */
+  /* Refined thin scrollbar */
   ::-webkit-scrollbar { width: 3px; height: 3px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-border/60 rounded-full; }
+  ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-muted-foreground/30; }
 
   input:focus, textarea:focus, select:focus { outline: none; }
+
+  /* Date/time inputs — inherit theme colors */
+  input[type="date"],
+  input[type="time"] {
+    color-scheme: dark;
+  }
+  :root input[type="date"],
+  :root input[type="time"] {
+    color-scheme: light;
+  }
 }
 
-/* ── Utility layer ──────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   UTILITIES
+   ══════════════════════════════════════════════════════════ */
 @layer utilities {
   .glass {
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
   }
   .glass-sm {
-    backdrop-filter: blur(12px) saturate(150%);
-    -webkit-backdrop-filter: blur(12px) saturate(150%);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
   }
 
-  .ios-card {
-    @apply rounded-2xl border border-card-border bg-card shadow-sm;
-  }
-  .ios-card-elevated {
+  /* Standard card */
+  .surface {
     @apply rounded-2xl border border-card-border bg-card;
-    box-shadow: 0 2px 16px rgba(0,0,0,.14), 0 0 0 0.5px rgba(255,255,255,.04) inset;
+  }
+  .surface-elevated {
+    @apply rounded-2xl border border-card-border bg-card;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.08);
   }
 
+  /* Gradient text */
   .gradient-text {
-    @apply bg-gradient-to-r from-primary to-violet-400 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent;
   }
 
+  /* Shimmer skeleton */
   .shimmer {
     background: linear-gradient(
       90deg,
       hsl(var(--muted)) 0%,
-      hsl(var(--muted-foreground) / 0.06) 50%,
+      hsl(var(--muted-foreground) / 0.07) 50%,
       hsl(var(--muted)) 100%
     );
     background-size: 200% 100%;
     animation: shimmer 1.7s ease-in-out infinite;
   }
 
+  /* Subtle primary glow */
   .glow-primary {
-    box-shadow: 0 0 20px hsl(var(--primary) / 0.22), 0 0 40px hsl(var(--primary) / 0.08);
-  }
-  .glow-sm {
-    box-shadow: 0 0 10px hsl(var(--primary) / 0.18);
+    box-shadow: 0 0 18px hsl(var(--primary) / 0.2), 0 0 36px hsl(var(--primary) / 0.08);
   }
 
   .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
   .animate-in { animation-fill-mode: both; }
 
-  /* Priority colors */
-  .priority-high   { color: hsl(0 84% 60%); }
-  .priority-medium { color: hsl(38 92% 50%); }
-  .priority-low    { color: hsl(210 86% 60%); }
+  /* Scheduled time pill */
+  .time-chip {
+    @apply inline-flex items-center gap-1 text-[11px] font-semibold
+           px-1.5 py-0.5 rounded-md
+           bg-primary/8 text-primary/80;
+  }
 }
 
-/* ── Keyframes ──────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   KEYFRAMES
+   ══════════════════════════════════════════════════════════ */
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
 }
 @keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-4px); }
-}
-@keyframes pulse-ring {
-  0% { transform: scale(0.8); opacity: 1; }
-  100% { transform: scale(2); opacity: 0; }
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4px); }
 }
 @keyframes slide-up-fade {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes slide-right-fade {
-  from { opacity: 0; transform: translateX(12px); }
-  to { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; transform: translateX(10px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
-@keyframes timer-tick {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+@keyframes slide-down-fade {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Easing ─────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════
+   GLOBAL TRANSITION EASING
+   ══════════════════════════════════════════════════════════ */
 * { transition-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94); }
 .spring { transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); }
