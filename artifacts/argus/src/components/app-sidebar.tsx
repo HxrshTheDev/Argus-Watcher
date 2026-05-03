@@ -16,7 +16,6 @@ import { useMemo } from "react";
 const NAV_ITEMS = [
   { title: "Dashboard", url: "/",          icon: LayoutDashboard, gradient: "from-blue-500 to-blue-600" },
   { title: "Chat",      url: "/chat",      icon: MessageSquare,   gradient: "from-violet-500 to-violet-600" },
-  { title: "Tasks",     url: "/tasks",     icon: CheckSquare,     gradient: "from-emerald-500 to-green-600" },
   { title: "Tracker",   url: "/tracker",   icon: BarChart2,       gradient: "from-teal-500 to-emerald-600" },
   { title: "Research",  url: "/research",  icon: Search,          gradient: "from-orange-500 to-amber-600" },
   { title: "Email",     url: "/email",     icon: Mail,            gradient: "from-red-500 to-rose-600" },
@@ -90,8 +89,8 @@ export default function AppSidebar() {
             <SidebarMenu className="space-y-0.5">
               {NAV_ITEMS.map((item) => {
                 const active = isCurrent(item.url);
-                const isTask = item.url === "/tasks";
-                const badge = isTask && overdueCount > 0 ? overdueCount : null;
+                const isTracker = item.url === "/tracker";
+                const badge = isTracker && overdueCount > 0 ? overdueCount : null;
 
                 return (
                   <SidebarMenuItem key={item.title}>

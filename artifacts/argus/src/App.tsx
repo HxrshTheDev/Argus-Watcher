@@ -8,7 +8,6 @@ import NotFound from "@/pages/not-found";
 
 import Dashboard from "@/pages/dashboard";
 import Chat from "@/pages/chat";
-import Tasks from "@/pages/tasks";
 import Tracker from "@/pages/tracker";
 import Research from "@/pages/research";
 import Email from "@/pages/email";
@@ -18,7 +17,7 @@ import AppSidebar from "@/components/app-sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { NotificationsMonitor } from "@/components/notifications-monitor";
 import {
-  LayoutDashboard, MessageSquare, CheckSquare, Search, Mail, Share2, Zap, BarChart2,
+  LayoutDashboard, MessageSquare, Search, Mail, Share2, Zap, BarChart2,
 } from "lucide-react";
 import { useListTasks } from "@workspace/api-client-react";
 import { useMemo } from "react";
@@ -28,7 +27,6 @@ const queryClient = new QueryClient();
 const NAV = [
   { url: "/",          icon: LayoutDashboard, label: "Home",     gradient: "from-blue-500 to-blue-600",     activeText: "text-blue-400" },
   { url: "/chat",      icon: MessageSquare,   label: "Chat",     gradient: "from-violet-500 to-violet-600", activeText: "text-violet-400" },
-  { url: "/tasks",     icon: CheckSquare,     label: "Tasks",    gradient: "from-emerald-500 to-green-600", activeText: "text-emerald-400" },
   { url: "/tracker",   icon: BarChart2,       label: "Tracker",  gradient: "from-teal-500 to-emerald-600",  activeText: "text-teal-400" },
   { url: "/research",  icon: Search,          label: "Research", gradient: "from-orange-500 to-amber-600",  activeText: "text-orange-400" },
   { url: "/email",     icon: Mail,            label: "Email",    gradient: "from-red-500 to-rose-600",      activeText: "text-red-400" },
@@ -113,7 +111,7 @@ function Router() {
             <Route path="/" component={Dashboard} />
             <Route path="/chat" component={Chat} />
             <Route path="/chat/:id" component={Chat} />
-            <Route path="/tasks" component={Tasks} />
+            <Route path="/tasks" component={Tracker} />
             <Route path="/tracker" component={Tracker} />
             <Route path="/research" component={Research} />
             <Route path="/email" component={Email} />

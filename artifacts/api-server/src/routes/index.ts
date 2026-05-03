@@ -11,6 +11,7 @@ import dashboardRouter from "./dashboard";
 import gmailRouter from "./gmail";
 import briefingRouter from "./briefing";
 import notificationsRouter from "./notifications";
+import trackerRouter from "./tracker";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(dashboardRouter);
 router.use(gmailRouter);
 router.use(briefingRouter);
 router.use(notificationsRouter);
+router.use(trackerRouter);
 
 export default router;
