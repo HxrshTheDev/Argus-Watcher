@@ -255,16 +255,42 @@
 
   /* Glass cards — frosted white in light, dark warm in dark */
   .glass-card {
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
     background: rgba(255,255,255,0.55);
     border: 1px solid rgba(255,255,255,0.75);
-    box-shadow: 0 4px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.6);
   }
   .dark .glass-card {
-    background: rgba(45,18,26,0.55);
+    background: rgba(30,10,16,0.54);
     border: 1px solid rgba(255,255,255,0.08);
     box-shadow: 0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  /* Alert variant (overdue tasks etc.) */
+  .glass-card-alert {
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.25);
+    box-shadow: 0 4px 20px rgba(239,68,68,0.12), inset 0 1px 0 rgba(255,255,255,0.5);
+  }
+  .dark .glass-card-alert {
+    background: rgba(239,68,68,0.07);
+    border: 1px solid rgba(239,68,68,0.25);
+    box-shadow: 0 4px 20px rgba(239,68,68,0.14);
+  }
+  /* Notification panel */
+  .glass-panel {
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    background: rgba(255,255,255,0.78);
+    border: 1px solid rgba(255,255,255,0.85);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.8);
+  }
+  .dark .glass-panel {
+    background: rgba(28,9,15,0.88);
+    border: 1px solid rgba(255,255,255,0.10);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.06);
   }
 
   /* Glass sidebar — stronger blur */
