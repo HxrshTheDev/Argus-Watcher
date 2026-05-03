@@ -6,3 +6,4 @@ export * from "./emails";
 export * from "./posts";
 export * from "./workflows";
 export * from "./briefings";
+export * from "./notebooks";

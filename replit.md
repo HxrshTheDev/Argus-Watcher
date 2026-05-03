@@ -1,6 +1,6 @@
 # Argus — Personal AI Assistant
 
-A modular personal AI assistant web app with 7 integrated modules.
+A modular personal AI assistant web app with 8 integrated modules including a NotebookLM-style research workspace.
 
 ## Architecture
 
@@ -31,18 +31,29 @@ lib/
 | Module | Route | Description |
 |--------|-------|-------------|
 | Dashboard | `/` | Stats overview + recent activity feed |
-| Chat | `/chat` | SSE streaming conversations with AI |
-| Tasks | `/tasks` | Task manager with priorities, due dates, filtering |
-| Research | `/research` | AI-powered research with saved notes |
+| Chat | `/chat` | Claude-like SSE streaming conversations with AI |
+| Tracker | `/tracker` | Tasks + Overview + Habits with keyboard shortcuts |
+| Research | `/research` | NotebookLM-style notebooks with sources, grounded chat, notes, Studio |
 | Email | `/email` | Draft + summarize emails with AI |
 | Posts | `/posts` | Social media post generator |
 | Workflows | `/workflows` | Automation workflow builder + runner |
 
 ## Database Schema
 
-Tables: `conversations`, `messages`, `tasks`, `research_notes`, `email_drafts`, `social_posts`, `workflows`
+Tables: `conversations`, `messages`, `tasks`, `research_notes`, `email_drafts`, `social_posts`, `workflows`, `notebooks`, `notebook_sources`, `notebook_notes`, `notebook_chats`
 
 Run migrations: `pnpm --filter @workspace/db run push`
+
+## Notebooks (NotebookLM Feature Set)
+
+The Research page is a full NotebookLM-style experience:
+- **Notebooks** — create named notebooks with emoji + description
+- **Sources** — add text or URL-pasted content as sources (stored in `notebook_sources`)
+- **Grounded AI Chat** — chat where AI answers only from your sources, with `[Source N]` inline citations
+- **Notes** — free-form note cards per notebook (create/edit/delete)
+- **Studio** — one-click generation: Study Guide, FAQ, Timeline, Briefing Doc, Outline, Summary
+- 3-panel desktop layout: Sources | Chat | Notes+Studio
+- Mobile: tabbed Sources / Chat / Notes
 
 ## API Routes
 
@@ -51,7 +62,7 @@ All routes are prefixed with `/api`:
 - `POST /api/openai/conversations/:id/messages` — SSE chat streaming
 - `GET/POST/PATCH/DELETE /api/tasks` — task CRUD
 - `GET /api/tasks/stats` — task statistics
-- `GET/POST/DELETE /api/research` — research notes
+- `GET/POST/DELETE /api/research` — legacy research notes
 - `POST /api/research/query` — AI research query
 - `GET/POST/DELETE /api/emails` — email drafts
 - `POST /api/emails/draft` — AI email generation
@@ -62,6 +73,13 @@ All routes are prefixed with `/api`:
 - `POST /api/workflows/:id/run` — run a workflow
 - `GET /api/dashboard/stats` — dashboard statistics
 - `GET /api/activity` — recent activity feed
+- `GET/POST /api/notebooks` — list/create notebooks
+- `GET/PUT/DELETE /api/notebooks/:id` — notebook CRUD (returns with sources/notes/chats)
+- `POST/DELETE /api/notebooks/:id/sources` — add/remove sources
+- `GET/POST/PUT/DELETE /api/notebooks/:id/notes` — note CRUD
+- `POST /api/notebooks/:id/chat` — grounded AI chat (with citations)
+- `DELETE /api/notebooks/:id/chat` — clear chat history
+- `POST /api/notebooks/:id/studio` — generate output (study-guide|faq|timeline|briefing|outline|summary)
 
 ## Key Implementation Notes
 
