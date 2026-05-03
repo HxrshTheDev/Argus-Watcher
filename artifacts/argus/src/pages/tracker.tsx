@@ -14,7 +14,7 @@ import {
   CheckCircle2, Circle, Timer, Play, Pause, RotateCcw,
   ChevronRight, ChevronLeft, CalendarDays, Clock, Pencil,
   Sparkles, LayoutDashboard, CheckSquare, BarChart2, Coffee,
-  AlertCircle, Hourglass, CalendarClock,
+  AlertCircle, Hourglass, CalendarClock, GripVertical,
 } from "lucide-react";
 
 /* ─────────────────────────────────────────────────────────
@@ -28,7 +28,6 @@ type TimerMode  = "work" | "short" | "long";
 type Recurrence = "daily" | "weekdays" | "weekly" | "biweekly" | "monthly";
 
 interface Goal      { id: string; text: string; }
-interface FocusItem { id: string; text: string; done: boolean; }
 interface Habit     { id: string; name: string; emoji: string; frequency: HabitFreq; completions: Record<string, boolean>; }
 interface Subtask   { id: string; text: string; done: boolean; }
 interface TimerState {
@@ -1189,6 +1188,200 @@ function WeeklyReview({ tasks }: { tasks: any[] }) {
 }
 
 /* ─────────────────────────────────────────────────────────
+   TODAY'S FOCUS — drag-to-prioritise up to 3 tasks
+───────────────────────────────────────────────────────── */
+const MAX_FOCUS = 3;
+
+function TodayFocus({ tasks, onToggle, onGoToTasks }: {
+  tasks: any[];
+  onToggle: (id: number, completed: boolean) => void;
+  onGoToTasks: () => void;
+}) {
+  const focusKey = `argus_focus_${todayKey()}`;
+  const [focusIds, setFocusIds] = useState<number[]>(() => ls(focusKey, []));
+  const [picking, setPicking]   = useState<number | null>(null);
+  const [dragIdx, setDragIdx]   = useState<number | null>(null);
+  const [dropIdx, setDropIdx]   = useState<number | null>(null);
+  const pickerRef               = useRef<HTMLDivElement>(null);
+
+  const saveFocusIds = (ids: number[]) => { setFocusIds(ids); lsSave(focusKey, ids); };
+
+  // Auto-remove completed tasks from focus
+  useEffect(() => {
+    const valid = focusIds.filter(id => {
+      const t = tasks.find((t: any) => t.id === id);
+      return t && !t.completed;
+    });
+    if (valid.length !== focusIds.length) saveFocusIds(valid);
+  }, [tasks]);
+
+  // Close picker on outside click
+  useEffect(() => {
+    if (picking === null) return;
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPicking(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [picking]);
+
+  const validIds    = focusIds.filter(id => tasks.some((t: any) => t.id === id && !t.completed));
+  const focusTasks  = validIds.map(id => tasks.find((t: any) => t.id === id));
+  const available   = tasks.filter((t: any) => !t.completed && !validIds.includes(t.id));
+  const slots       = Array.from({ length: MAX_FOCUS }, (_, i) => ({ id: validIds[i] ?? null, task: focusTasks[i] ?? null }));
+
+  const addToFocus = (taskId: number, slot: number) => {
+    const next = [...validIds];
+    next[slot] = taskId;
+    saveFocusIds(next.filter((id, i, arr) => id !== undefined && arr.indexOf(id) === i));
+    setPicking(null);
+  };
+
+  const removeFromFocus = (slot: number) => saveFocusIds(validIds.filter((_, i) => i !== slot));
+
+  const handleDrop = (toIdx: number) => {
+    if (dragIdx === null || dragIdx === toIdx) { setDragIdx(null); setDropIdx(null); return; }
+    const next = [...validIds];
+    const [moved] = next.splice(dragIdx, 1);
+    next.splice(toIdx, 0, moved);
+    saveFocusIds(next);
+    setDragIdx(null); setDropIdx(null);
+  };
+
+  const allDone = validIds.length > 0 && validIds.every(id => {
+    const t = tasks.find((t: any) => t.id === id);
+    return t?.completed;
+  });
+
+  return (
+    <div className="surface p-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Target className="w-4 h-4 text-primary" />
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Today's Focus</p>
+          <span className="text-[10px] text-muted-foreground/35">· top 3</span>
+        </div>
+        {validIds.length > 0 && (
+          <span className={`text-[11px] font-semibold ${validIds.length === MAX_FOCUS ? "text-primary" : "text-muted-foreground/50"}`}>
+            {validIds.length}/{MAX_FOCUS}
+          </span>
+        )}
+      </div>
+
+      {/* Slots */}
+      <div className="space-y-2">
+        {slots.map(({ task }, i) => (
+          <div key={i}
+            onDragOver={e => { e.preventDefault(); if (dragIdx !== null && dragIdx !== i) setDropIdx(i); }}
+            onDrop={() => handleDrop(i)}
+            onDragLeave={() => setDropIdx(null)}
+            className={`transition-all duration-150 ${dropIdx === i && dragIdx !== i ? "scale-[1.015]" : ""}`}>
+            {task ? (
+              <div
+                draggable
+                onDragStart={() => setDragIdx(i)}
+                onDragEnd={() => { setDragIdx(null); setDropIdx(null); }}
+                className={`flex items-center gap-3 px-3.5 py-3 rounded-xl border bg-card transition-all select-none
+                  ${dragIdx === i ? "opacity-40 scale-[0.98] cursor-grabbing" : "cursor-grab"}
+                  ${dropIdx === i && dragIdx !== i ? "border-primary/40 bg-primary/5 shadow-sm shadow-primary/8" : "border-border/60 hover:border-border"}`}>
+                {/* Rank badge */}
+                <span className="w-5 h-5 rounded-md bg-muted flex items-center justify-center text-[10px] font-black text-muted-foreground shrink-0">
+                  {i + 1}
+                </span>
+                {/* Drag handle */}
+                <GripVertical className="w-3.5 h-3.5 text-muted-foreground/20 shrink-0" />
+                {/* Priority dot */}
+                <span className={`w-2 h-2 rounded-full shrink-0 ${P_CFG[(task.priority as Priority) || "medium"].dot}`} />
+                {/* Title */}
+                <span className="flex-1 text-[13px] font-medium min-w-0 truncate leading-snug">{task.title}</span>
+                {/* Due time */}
+                {task.dueDate && (
+                  <span className={`text-[10px] font-semibold shrink-0 ${task.dueDate < todayKey() ? "text-rose-500" : "text-muted-foreground/50"}`}>
+                    {task.dueDate === todayKey() ? "Today" : format(parseISO(task.dueDate), "MMM d")}
+                  </span>
+                )}
+                {/* Complete */}
+                <button onClick={() => onToggle(task.id, task.completed)}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/8 transition-all active:scale-90 shrink-0">
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+                {/* Remove from focus */}
+                <button onClick={() => removeFromFocus(i)}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/30 hover:text-muted-foreground hover:bg-muted transition-all active:scale-90 shrink-0">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative" ref={picking === i ? pickerRef : null}>
+                <button onClick={() => setPicking(picking === i ? null : i)}
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-3 rounded-xl border border-dashed text-[13px] transition-all
+                    ${picking === i
+                      ? "border-primary/30 text-primary bg-primary/3"
+                      : "border-border/40 text-muted-foreground/40 hover:border-primary/25 hover:text-primary/60 hover:bg-primary/2"}`}>
+                  <span className="w-5 h-5 rounded-md bg-muted flex items-center justify-center text-[10px] font-black text-muted-foreground/40 shrink-0">
+                    {i + 1}
+                  </span>
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Pick a priority task</span>
+                </button>
+
+                {/* Task picker dropdown */}
+                {picking === i && (
+                  <div className="absolute top-full left-0 right-0 mt-1.5 z-50 rounded-xl border border-border bg-popover shadow-xl overflow-hidden">
+                    {available.length === 0 ? (
+                      <div className="py-8 text-center">
+                        <p className="text-[12px] text-muted-foreground">No more pending tasks</p>
+                        <button onClick={() => { setPicking(null); onGoToTasks(); }}
+                          className="mt-2 text-xs text-primary font-semibold hover:underline">
+                          Add tasks →
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="max-h-52 overflow-y-auto divide-y divide-border/30">
+                        {/* Suggested: overdue + today first */}
+                        {[
+                          ...available.filter((t: any) => t.dueDate && t.dueDate <= todayKey()),
+                          ...available.filter((t: any) => !t.dueDate || t.dueDate > todayKey()),
+                        ].slice(0, 10).map((t: any) => (
+                          <button key={t.id} onClick={() => addToFocus(t.id, i)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors text-left group">
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${P_CFG[(t.priority as Priority) || "medium"].dot}`} />
+                            <span className="flex-1 text-[13px] truncate">{t.title}</span>
+                            {t.dueDate && (
+                              <span className={`text-[10px] shrink-0 font-medium ${t.dueDate < todayKey() ? "text-rose-500" : t.dueDate === todayKey() ? "text-amber-500" : "text-muted-foreground/50"}`}>
+                                {t.dueDate === todayKey() ? "Today" : t.dueDate < todayKey() ? "Overdue" : format(parseISO(t.dueDate), "MMM d")}
+                              </span>
+                            )}
+                          </button>
+                        ))}
+                        {available.length > 10 && (
+                          <button onClick={() => { setPicking(null); onGoToTasks(); }}
+                            className="w-full py-2.5 text-center text-[11px] text-primary font-semibold hover:bg-muted/30 transition-colors">
+                            +{available.length - 10} more tasks →
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Empty hint */}
+      {validIds.length === 0 && (
+        <p className="text-center text-[11px] text-muted-foreground/35 mt-3 pb-1">
+          Choose your 3 most important tasks for today
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
    OVERVIEW TAB
 ───────────────────────────────────────────────────────── */
 interface OverviewTabProps {
@@ -1196,15 +1389,14 @@ interface OverviewTabProps {
   now: Date;
   onGoToTasks: () => void;
   onUpdate: (id: number, data: any) => void;
+  onToggle: (id: number, completed: boolean) => void;
   timer: ReturnType<typeof useTaskTimer>;
 }
 
-function OverviewTab({ tasks, now, onGoToTasks, onUpdate, timer }: OverviewTabProps) {
+function OverviewTab({ tasks, now, onGoToTasks, onUpdate, onToggle, timer }: OverviewTabProps) {
   const todayStr = now.toISOString().split("T")[0];
   const [goals, setGoals]     = useState<Goal[]>(() => ls(GOALS_KEY, []));
-  const [focus, setFocus]     = useState<FocusItem[]>(() => ls("argus_focus", []));
   const [newGoal, setNewGoal] = useState("");
-  const [newFocus, setNewFocus] = useState("");
   const [rem, setRem] = useState(timer.getRem());
 
   useEffect(() => { const id = setInterval(() => setRem(timer.getRem()), 500); return () => clearInterval(id); }, [timer]);
@@ -1215,7 +1407,6 @@ function OverviewTab({ tasks, now, onGoToTasks, onUpdate, timer }: OverviewTabPr
   const doneToday    = useMemo(() => tasks.filter(t => t.completed && t.updatedAt?.startsWith(todayStr)).length, [tasks, todayStr]);
 
   const saveGoals = (g: Goal[]) => { setGoals(g); lsSave(GOALS_KEY, g); };
-  const saveFocus = (f: FocusItem[]) => { setFocus(f); lsSave("argus_focus", f); };
 
   return (
     <ScrollArea className="h-full">
@@ -1272,6 +1463,9 @@ function OverviewTab({ tasks, now, onGoToTasks, onUpdate, timer }: OverviewTabPr
             </div>
           </div>
         )}
+
+        {/* Today's Focus */}
+        <TodayFocus tasks={tasks} onToggle={onToggle} onGoToTasks={onGoToTasks} />
 
         {/* Goals */}
         <div className="surface p-5">
@@ -1641,7 +1835,7 @@ export default function Tracker() {
       <TabBar tab={tab} setTab={setTab} />
       <div className="flex-1 min-h-0 overflow-hidden">
         {tab === "overview" && (
-          <OverviewTab tasks={tasks} now={now} onGoToTasks={goToTasks} onUpdate={handleUpdate} timer={timer} />
+          <OverviewTab tasks={tasks} now={now} onGoToTasks={goToTasks} onUpdate={handleUpdate} onToggle={handleToggle} timer={timer} />
         )}
         {tab === "habits" && <HabitsTab />}
       </div>
