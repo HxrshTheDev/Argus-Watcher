@@ -1,56 +1,39 @@
 import { Link, useLocation } from "wouter";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuBadge,
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
+  SidebarGroupContent, SidebarHeader, SidebarMenu,
+  SidebarMenuButton, SidebarMenuItem, SidebarMenuBadge,
 } from "@/components/ui/sidebar";
 import {
-  LayoutDashboard,
-  MessageSquare,
-  CheckSquare,
-  Search,
-  Mail,
-  Share2,
-  Zap,
-  Bell,
-  Moon,
-  Sun,
+  LayoutDashboard, MessageSquare, CheckSquare, Search, Mail,
+  Share2, Zap, Moon, Sun, Bell,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useListTasks } from "@workspace/api-client-react";
+import { useNotifications } from "@/hooks/use-notifications";
 import { useMemo } from "react";
 
 const NAV_ITEMS = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard, color: "bg-blue-500", badge: null as number | null },
-  { title: "Chat",      url: "/chat",      icon: MessageSquare, color: "bg-violet-500", badge: null as number | null },
-  { title: "Tasks",     url: "/tasks",     icon: CheckSquare,   color: "bg-green-500",  badge: null as number | null },
-  { title: "Research",  url: "/research",  icon: Search,        color: "bg-orange-500", badge: null as number | null },
-  { title: "Email",     url: "/email",     icon: Mail,          color: "bg-red-500",    badge: null as number | null },
-  { title: "Posts",     url: "/posts",     icon: Share2,        color: "bg-pink-500",   badge: null as number | null },
-  { title: "Workflows", url: "/workflows", icon: Zap,           color: "bg-yellow-500", badge: null as number | null },
-];
+  { title: "Dashboard", url: "/",          icon: LayoutDashboard, gradient: "from-blue-500 to-blue-600" },
+  { title: "Chat",      url: "/chat",      icon: MessageSquare,   gradient: "from-violet-500 to-violet-600" },
+  { title: "Tasks",     url: "/tasks",     icon: CheckSquare,     gradient: "from-emerald-500 to-green-600" },
+  { title: "Research",  url: "/research",  icon: Search,          gradient: "from-orange-500 to-amber-600" },
+  { title: "Email",     url: "/email",     icon: Mail,            gradient: "from-red-500 to-rose-600" },
+  { title: "Posts",     url: "/posts",     icon: Share2,          gradient: "from-pink-500 to-rose-500" },
+  { title: "Workflows", url: "/workflows", icon: Zap,             gradient: "from-yellow-500 to-amber-500" },
+] as const;
 
 export default function AppSidebar() {
   const [location] = useLocation();
   const { theme, setTheme } = useTheme();
   const { data: tasks } = useListTasks({}, { refetchInterval: 60_000 });
+  const { notifications } = useNotifications();
 
   const overdueCount = useMemo(() => {
     if (!tasks) return 0;
     const today = new Date().toISOString().split("T")[0];
-    return tasks.filter((t) => !t.completed && t.dueDate && t.dueDate < today).length;
+    return tasks.filter(t => !t.completed && t.dueDate && t.dueDate < today).length;
   }, [tasks]);
-
-  const navItems = NAV_ITEMS.map(item =>
-    item.url === "/tasks" ? { ...item, badge: overdueCount > 0 ? overdueCount : null } : item
-  );
 
   const isCurrent = (path: string) => {
     if (path === "/" && location === "/") return true;
@@ -62,56 +45,95 @@ export default function AppSidebar() {
 
   return (
     <Sidebar variant="inset">
-      {/* App header */}
-      <SidebarHeader className="px-4 pt-6 pb-5 border-b border-sidebar-border">
+      {/* ── Brand header ─────────────────────────────────── */}
+      <SidebarHeader className="px-4 pt-5 pb-4">
+        {/* Accent gradient bar */}
+        <div className="h-px w-full bg-gradient-to-r from-blue-500/0 via-primary/60 to-violet-500/0 mb-4 rounded-full" />
+
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-              <span className="text-white font-black text-base tracking-tight">A</span>
+            {/* Logo orb */}
+            <div className="relative w-9 h-9 shrink-0">
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 shadow-lg shadow-blue-500/30" />
+              <div className="absolute inset-0 rounded-xl flex items-center justify-center">
+                <span className="text-white font-black text-[15px] tracking-tight leading-none">A</span>
+              </div>
+              <div className="absolute inset-0 rounded-xl ring-1 ring-white/10" />
             </div>
             <div>
-              <span className="font-bold text-base tracking-tight block leading-none">Argus</span>
-              <span className="text-[11px] text-muted-foreground">Personal AI</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-[15px] tracking-tight leading-none">Argus</span>
+              </div>
+              <span className="text-[11px] text-muted-foreground/70 mt-0.5 block">Personal AI</span>
             </div>
           </div>
-          {overdueCount > 0 && (
-            <div className="flex items-center gap-1.5 bg-destructive/10 text-destructive rounded-full px-2 py-1">
-              <Bell className="w-3 h-3" />
-              <span className="text-[11px] font-bold">{overdueCount}</span>
+
+          {/* Notification bell */}
+          {notifications.length > 0 && (
+            <div className="relative">
+              <div className="w-8 h-8 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+                <Bell className="w-3.5 h-3.5 text-destructive" />
+              </div>
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                {notifications.length > 9 ? "9+" : notifications.length}
+              </span>
             </div>
           )}
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="pt-2">
+      {/* ── Navigation ───────────────────────────────────── */}
+      <SidebarContent className="px-3 pt-1">
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-0.5 px-2">
-              {navItems.map((item) => {
+            <SidebarMenu className="space-y-0.5">
+              {NAV_ITEMS.map((item) => {
                 const active = isCurrent(item.url);
+                const isTask = item.url === "/tasks";
+                const badge = isTask && overdueCount > 0 ? overdueCount : null;
+
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild
                       isActive={active}
-                      className={`h-11 rounded-xl font-medium transition-all duration-150 ${
-                        active
-                          ? "bg-primary/10 text-primary hover:bg-primary/15"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent"
-                      }`}
+                      className={`
+                        h-[42px] rounded-xl font-medium transition-all duration-200 group/nav
+                        ${active
+                          ? "bg-primary/10 text-primary hover:bg-primary/12"
+                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        }
+                      `}
                     >
-                      <Link href={item.url}>
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                          active ? "bg-primary shadow-sm shadow-primary/30" : item.color + " shadow-sm opacity-85"
-                        }`}>
+                      <Link href={item.url} className="flex items-center gap-3 px-2.5">
+                        {/* Icon container */}
+                        <div className={`
+                          relative w-7 h-7 rounded-[8px] flex items-center justify-center shrink-0
+                          transition-all duration-200
+                          ${active
+                            ? `bg-gradient-to-br ${item.gradient} shadow-sm`
+                            : `bg-gradient-to-br ${item.gradient} opacity-80 group-hover/nav:opacity-100`
+                          }
+                        `}>
                           <item.icon className="w-3.5 h-3.5 text-white" />
+                          {/* Shine overlay */}
+                          <div className="absolute inset-0 rounded-[8px] bg-gradient-to-b from-white/20 to-transparent" />
                         </div>
-                        <span className="ml-2 text-sm">{item.title}</span>
+
+                        <span className={`text-[13.5px] font-medium tracking-tight flex-1 ${active ? "text-primary" : ""}`}>
+                          {item.title}
+                        </span>
+
+                        {/* Active indicator dot */}
+                        {active && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                        )}
                       </Link>
                     </SidebarMenuButton>
-                    {item.badge !== null && (
-                      <SidebarMenuBadge className="bg-destructive text-white text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
-                        {item.badge}
+
+                    {badge !== null && (
+                      <SidebarMenuBadge className="bg-destructive text-white text-[9px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1 leading-none">
+                        {badge}
                       </SidebarMenuBadge>
                     )}
                   </SidebarMenuItem>
@@ -122,15 +144,22 @@ export default function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-3">
+      {/* ── Footer ───────────────────────────────────────── */}
+      <SidebarFooter className="px-3 pb-5">
+        <div className="h-px bg-sidebar-border mb-3" />
         <button
           onClick={() => setTheme(isDark ? "light" : "dark")}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-sidebar-accent transition-colors text-sm text-sidebar-foreground"
+          className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl hover:bg-sidebar-accent transition-colors duration-150 group/theme"
         >
-          <div className="w-7 h-7 rounded-lg bg-slate-500 flex items-center justify-center shadow-sm">
-            {isDark ? <Sun className="w-3.5 h-3.5 text-white" /> : <Moon className="w-3.5 h-3.5 text-white" />}
+          <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center shadow-sm relative overflow-hidden shrink-0">
+            {isDark
+              ? <Sun className="w-3.5 h-3.5 text-yellow-300" />
+              : <Moon className="w-3.5 h-3.5 text-white" />}
+            <div className="absolute inset-0 rounded-[8px] bg-gradient-to-b from-white/15 to-transparent" />
           </div>
-          <span className="font-medium">{isDark ? "Light Mode" : "Dark Mode"}</span>
+          <span className="text-[13.5px] font-medium text-sidebar-foreground/80 group-hover/theme:text-sidebar-foreground tracking-tight">
+            {isDark ? "Light Mode" : "Dark Mode"}
+          </span>
         </button>
       </SidebarFooter>
     </Sidebar>

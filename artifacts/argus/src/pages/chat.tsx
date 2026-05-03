@@ -1,28 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import {
-  useListConversations,
-  useGetConversation,
-  useCreateConversation,
-  useDeleteConversation,
-  getListConversationsQueryKey,
-  getGetConversationQueryKey
+  useListConversations, useGetConversation, useCreateConversation,
+  useDeleteConversation, getListConversationsQueryKey, getGetConversationQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Plus, Send, Trash2, MessageSquare, Mic, MicOff, Bot, User, ChevronLeft } from "lucide-react";
+import { Plus, Trash2, MessageSquare, Mic, MicOff, Bot, User, ChevronLeft, Send, Sparkles } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
-  }
+  interface Window { SpeechRecognition: typeof SpeechRecognition; webkitSpeechRecognition: typeof SpeechRecognition; }
 }
 
 function useVoiceInput(onTranscript: (text: string) => void) {
@@ -39,88 +30,79 @@ function useVoiceInput(onTranscript: (text: string) => void) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     const recognition = new SR();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
+    recognition.continuous = false; recognition.interimResults = true; recognition.lang = "en-US";
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
     recognition.onerror = () => setIsListening(false);
     recognition.onresult = (event) => {
       let transcript = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
+      for (let i = event.resultIndex; i < event.results.length; i++) transcript += event.results[i][0].transcript;
       if (event.results[event.results.length - 1].isFinal) onTranscript(transcript.trim());
     };
     recognitionRef.current = recognition;
     recognition.start();
   }, [onTranscript]);
 
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    setIsListening(false);
-  }, []);
-
-  const toggle = useCallback(() => {
-    if (isListening) stopListening(); else startListening();
-  }, [isListening, startListening, stopListening]);
-
+  const stopListening = useCallback(() => { recognitionRef.current?.stop(); setIsListening(false); }, []);
+  const toggle = useCallback(() => { if (isListening) stopListening(); else startListening(); }, [isListening, startListening, stopListening]);
   return { isListening, isSupported, toggle };
 }
 
-/* ─── Conversation list ─────────────────────────────────── */
-function ConversationList({
-  conversations, activeId, onCreate, onSelect, onDelete, isCreating,
-}: {
-  conversations: any[];
-  activeId?: number;
-  onCreate: () => void;
-  onSelect: (id: number) => void;
-  onDelete: (id: number, e: React.MouseEvent) => void;
-  isCreating: boolean;
+/* ── Conversation list ────────────────────────────────── */
+function ConversationList({ conversations, activeId, onCreate, onSelect, onDelete, isCreating }: {
+  conversations: any[]; activeId?: number;
+  onCreate: () => void; onSelect: (id: number) => void;
+  onDelete: (id: number, e: React.MouseEvent) => void; isCreating: boolean;
 }) {
   return (
-    <div className="flex flex-col h-full bg-card/30">
-      <div className="p-3 border-b border-border">
-        <Button onClick={onCreate} className="w-full gap-2 h-9" size="sm" disabled={isCreating}>
-          <Plus className="w-4 h-4" /> New Chat
-        </Button>
+    <div className="flex flex-col h-full bg-sidebar">
+      <div className="px-4 pt-6 pb-4">
+        <h2 className="text-[15px] font-black tracking-tight mb-3">Conversations</h2>
+        <button onClick={onCreate} disabled={isCreating}
+          className="w-full flex items-center justify-center gap-2 h-9 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-all disabled:opacity-50 shadow-sm shadow-primary/20 active:scale-95"
+        >
+          {isCreating
+            ? <span className="w-3 h-3 rounded-full border-2 border-primary-foreground/40 border-t-primary-foreground animate-spin" />
+            : <Plus className="w-3.5 h-3.5" />}
+          New Chat
+        </button>
       </div>
-      <ScrollArea className="flex-1">
-        <div className="p-2 space-y-0.5">
-          {conversations?.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-6 px-2">No conversations yet. Start one above.</p>
-          )}
-          {conversations?.map((conv) => (
-            <div key={conv.id}
-              className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${activeId === conv.id ? "bg-primary/10 text-primary" : "hover:bg-muted/60"}`}
-              onClick={() => onSelect(conv.id)}
-            >
-              <div className="flex items-center gap-2 overflow-hidden min-w-0">
-                <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
-                <div className="min-w-0">
-                  <div className="font-medium truncate text-sm">{conv.title}</div>
-                  <div className="text-[10px] opacity-50 mt-0.5">{formatDistanceToNow(new Date(conv.updatedAt), { addSuffix: true })}</div>
-                </div>
-              </div>
-              <Button variant="ghost" size="icon"
-                className="w-6 h-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0 ml-1"
-                onClick={(e) => onDelete(conv.id, e)}
+      <ScrollArea className="flex-1 px-2 pb-4">
+        {conversations.length === 0 ? (
+          <p className="text-[12px] text-muted-foreground text-center py-8 px-4">No conversations yet. Start one above.</p>
+        ) : (
+          <div className="space-y-0.5">
+            {conversations.map((conv) => (
+              <div key={conv.id}
+                className={`group flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-150 ${activeId === conv.id ? "bg-primary/12 text-primary" : "hover:bg-sidebar-accent text-sidebar-foreground"}`}
+                onClick={() => onSelect(conv.id)}
               >
-                <Trash2 className="w-3 h-3" />
-              </Button>
-            </div>
-          ))}
-        </div>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${activeId === conv.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                    <MessageSquare className="w-3 h-3" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold truncate leading-tight">{conv.title}</p>
+                    <p className="text-[10px] opacity-50 mt-0.5">{formatDistanceToNow(new Date(conv.updatedAt), { addSuffix: true })}</p>
+                  </div>
+                </div>
+                <button
+                  className="w-6 h-6 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all shrink-0"
+                  onClick={(e) => onDelete(conv.id, e)}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </ScrollArea>
     </div>
   );
 }
 
-/* ─── Chat window ─────────────────────────────────────────── */
-function ChatWindow({
-  id, conversation, isLoading, onBack,
-}: {
+/* ── Chat window ──────────────────────────────────────── */
+function ChatWindow({ id, conversation, isLoading, onBack }: {
   id: number; conversation: any; isLoading: boolean; onBack?: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -144,21 +126,17 @@ function ChatWindow({
     e?.preventDefault();
     if (!input.trim() || isStreaming) return;
     const messageContent = input;
-    setInput("");
-    setIsStreaming(true);
-    setStreamingContent("");
-
+    setInput(""); setIsStreaming(true); setStreamingContent("");
     queryClient.setQueryData(getGetConversationQueryKey(id), (old: unknown) => {
       if (!old || typeof old !== "object") return old;
       const o = old as { messages?: unknown[] };
       return { ...o, messages: [...(o.messages || []), { id: Date.now(), conversationId: id, role: "user", content: messageContent, createdAt: new Date().toISOString() }] };
     });
-
     try {
       const response = await fetch(`${BASE}/api/openai/conversations/${id}/messages`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: messageContent }),
       });
-      if (!response.body) throw new Error("No response body");
+      if (!response.body) throw new Error("No body");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       while (true) {
@@ -182,56 +160,92 @@ function ChatWindow({
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
+  const autoResize = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  };
+
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="px-4 sm:px-6 py-3 border-b border-border bg-background/80 backdrop-blur-sm z-10 flex items-center gap-3">
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-border bg-background/80 glass z-10 shrink-0">
         {onBack && (
-          <button onClick={onBack} className="p-1.5 rounded-lg hover:bg-muted text-primary shrink-0">
+          <button onClick={onBack} className="w-8 h-8 rounded-xl flex items-center justify-center text-primary hover:bg-primary/10 transition-all active:scale-90">
             <ChevronLeft className="w-5 h-5" />
           </button>
         )}
-        <div className="bg-primary/10 text-primary p-1.5 rounded-full shrink-0">
-          <Bot className="w-4 h-4" />
+        <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center shadow-sm">
+          <Bot className="w-4.5 h-4.5 text-white" />
         </div>
-        <div className="min-w-0">
-          <h2 className="font-semibold text-sm leading-none truncate">{conversation?.title || "Conversation"}</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Argus AI</p>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-bold text-[14px] leading-tight truncate tracking-tight">{conversation?.title ?? "Conversation"}</h2>
+          <p className="text-[11px] text-muted-foreground">Argus AI · GPT-4.1</p>
         </div>
       </div>
 
-      <ScrollArea className="flex-1 px-4">
-        <div className="space-y-4 max-w-3xl mx-auto py-6">
+      {/* Messages */}
+      <ScrollArea className="flex-1 px-4 sm:px-6">
+        <div className="space-y-5 max-w-2xl mx-auto py-6">
           {isLoading ? (
-            <div className="flex justify-center p-8 opacity-40 text-sm">Loading…</div>
+            <div className="flex justify-center py-12">
+              <div className="w-6 h-6 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+            </div>
           ) : conversation?.messages?.length ? (
-            conversation.messages.map((msg: any) => (
-              <div key={msg.id} className={`flex items-start gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                  {msg.role === "user" ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+            conversation.messages.map((msg: any, i: number) => {
+              const isUser = msg.role === "user";
+              return (
+                <div key={msg.id} className={`flex items-end gap-2.5 ${isUser ? "flex-row-reverse" : ""}`}
+                  style={{ animationDelay: `${i * 20}ms` }}>
+                  {/* Avatar */}
+                  <div className={`w-7 h-7 rounded-2xl flex items-center justify-center shrink-0 ${isUser ? "bg-gradient-to-br from-blue-500 to-primary" : "bg-gradient-to-br from-violet-500 to-violet-600"}`}>
+                    {isUser ? <User className="w-3.5 h-3.5 text-white" /> : <Bot className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                  {/* Bubble */}
+                  <div className={`group max-w-[78%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1`}>
+                    <div className={`px-4 py-3 text-sm leading-relaxed ${
+                      isUser
+                        ? "bg-gradient-to-br from-primary to-violet-600 text-white rounded-2xl rounded-br-sm shadow-lg shadow-primary/20"
+                        : "bg-card border border-border text-foreground rounded-2xl rounded-bl-sm shadow-sm"
+                    }`}>
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    </div>
+                  </div>
                 </div>
-                <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${msg.role === "user" ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted text-foreground rounded-tl-sm"}`}>
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
-                </div>
-              </div>
-            ))
+              );
+            })
           ) : (
-            <div className="text-center py-16 text-muted-foreground flex flex-col items-center gap-3">
-              <Bot className="w-10 h-10 opacity-20" />
-              <div>
-                <p className="font-medium">Hi, I'm Argus</p>
-                <p className="text-sm opacity-70 mt-1">Ask me anything — I can help with tasks, research, writing and more.</p>
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground text-center">
+              <div className="relative mb-6">
+                <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-violet-500/20 to-blue-500/10 animate-pulse scale-110 blur-xl" />
+                <div className="relative w-20 h-20 rounded-3xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center shadow-2xl shadow-violet-500/30">
+                  <Bot className="w-9 h-9 text-white" />
+                </div>
               </div>
+              <h3 className="text-lg font-black tracking-tight text-foreground">Hi, I'm Argus</h3>
+              <p className="text-sm mt-1.5 max-w-xs opacity-70 leading-relaxed">
+                Ask me anything — tasks, research, writing, or just a chat. I'm here to help.
+              </p>
             </div>
           )}
 
+          {/* Streaming bubble */}
           {isStreaming && (
-            <div className="flex items-start gap-3">
-              <div className="shrink-0 w-7 h-7 rounded-full bg-muted flex items-center justify-center">
-                <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+            <div className="flex items-end gap-2.5">
+              <div className="w-7 h-7 rounded-2xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center shrink-0">
+                <Bot className="w-3.5 h-3.5 text-white" />
               </div>
-              <div className="max-w-[78%] rounded-2xl rounded-tl-sm px-4 py-2.5 bg-muted text-foreground text-sm leading-relaxed">
+              <div className="max-w-[78%] px-4 py-3 bg-card border border-border rounded-2xl rounded-bl-sm shadow-sm text-sm leading-relaxed">
                 <div className="whitespace-pre-wrap">{streamingContent}</div>
-                <span className="inline-block w-1.5 h-3.5 ml-0.5 bg-primary/70 animate-pulse rounded-sm" />
+                {!streamingContent && (
+                  <div className="flex gap-1 items-center h-5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                )}
+                {streamingContent && <span className="inline-block w-1 h-4 ml-0.5 bg-primary/70 animate-pulse rounded-sm align-middle" />}
               </div>
             </div>
           )}
@@ -239,37 +253,39 @@ function ChatWindow({
         </div>
       </ScrollArea>
 
-      <div className="p-3 sm:p-4 bg-background border-t border-border">
-        <form onSubmit={handleSend} className="max-w-3xl mx-auto">
-          <div className="relative flex items-end gap-2 bg-card border border-input rounded-2xl shadow-sm px-4 py-2 focus-within:ring-1 focus-within:ring-primary/40 transition-shadow">
-            <Textarea
+      {/* Input bar */}
+      <div className="shrink-0 px-4 sm:px-6 pb-4 pt-3 border-t border-border/60 bg-background/80 glass">
+        <form onSubmit={handleSend} className="max-w-2xl mx-auto">
+          <div className={`flex items-end gap-2 bg-card border rounded-2xl px-4 py-2.5 transition-all duration-200 ${isListening ? "border-destructive/50 shadow-lg shadow-destructive/10" : "border-border focus-within:border-primary/40 focus-within:shadow-lg focus-within:shadow-primary/8"}`}>
+            <textarea
               ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={autoResize}
               onKeyDown={handleKeyDown}
               placeholder={isListening ? "🎤 Listening…" : "Message Argus…"}
-              className="flex-1 border-0 shadow-none focus-visible:ring-0 bg-transparent resize-none min-h-[24px] max-h-[120px] py-1 text-sm"
               rows={1}
               disabled={isStreaming}
+              className="flex-1 bg-transparent text-sm resize-none focus:outline-none placeholder:text-muted-foreground/50 leading-relaxed font-medium min-h-[22px] max-h-[120px] py-0.5"
             />
-            <div className="flex items-center gap-1 mb-0.5 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0 pb-0.5">
               {isSupported && (
-                <Button type="button" size="icon" variant="ghost"
-                  className={`h-8 w-8 rounded-lg transition-colors ${isListening ? "text-destructive bg-destructive/10 hover:bg-destructive/20" : "text-muted-foreground hover:text-foreground"}`}
-                  onClick={toggleVoice} disabled={isStreaming}
+                <button type="button" onClick={toggleVoice} disabled={isStreaming}
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-90 ${isListening ? "bg-destructive/15 text-destructive" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
                 >
                   {isListening ? <MicOff className="w-4 h-4 animate-pulse" /> : <Mic className="w-4 h-4" />}
-                </Button>
+                </button>
               )}
-              <Button type="submit" size="icon" className="h-8 w-8 rounded-lg" disabled={!input.trim() || isStreaming}>
+              <button type="submit" disabled={!input.trim() || isStreaming}
+                className="w-8 h-8 rounded-xl flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:scale-100 transition-all active:scale-90 shadow-sm shadow-primary/20"
+              >
                 <Send className="w-3.5 h-3.5" />
-              </Button>
+              </button>
             </div>
           </div>
           {isListening && (
-            <p className="text-xs text-destructive text-center mt-2 flex items-center justify-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-              Listening — speak now, click mic to stop
+            <p className="text-[11px] text-destructive text-center mt-2 flex items-center justify-center gap-1.5 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" />
+              Listening — speak now, tap mic to stop
             </p>
           )}
         </form>
@@ -278,7 +294,7 @@ function ChatWindow({
   );
 }
 
-/* ─── Main ───────────────────────────────────────────────── */
+/* ── Main ─────────────────────────────────────────────── */
 export default function Chat() {
   const isMobile = useIsMobile();
   const params = useParams();
@@ -313,91 +329,90 @@ export default function Chat() {
     });
   };
 
-  const handleSelect = (convId: number) => { setLocation(`/chat/${convId}`); };
-
-  /* ── Mobile: show list OR chat (not both) ── */
+  /* ── Mobile ── */
   if (isMobile) {
     if (id) {
-      return (
-        <ChatWindow
-          id={id}
-          conversation={conversation}
-          isLoading={isLoading}
-          onBack={() => setLocation("/chat")}
-        />
-      );
+      return <ChatWindow id={id} conversation={conversation} isLoading={isLoading} onBack={() => setLocation("/chat")} />;
     }
     return (
-      <div className="flex flex-col h-full">
-        <div className="px-4 pt-5 pb-3 border-b border-border">
-          <h1 className="text-xl font-bold mb-3">Chat</h1>
-          <Button onClick={handleCreate} className="w-full gap-2 h-10" disabled={createMutation.isPending}>
-            <Plus className="w-4 h-4" /> New Conversation
-          </Button>
+      <div className="flex flex-col h-full bg-background">
+        <div className="px-5 pt-7 pb-4">
+          <h1 className="text-[28px] font-black tracking-tight leading-none mb-4">Chat</h1>
+          <button onClick={handleCreate} disabled={createMutation.isPending}
+            className="w-full flex items-center justify-center gap-2 h-11 rounded-2xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-50 shadow-lg shadow-primary/25 active:scale-[0.98]"
+          >
+            <Sparkles className="w-4 h-4" /> New Conversation
+          </button>
         </div>
-        <ScrollArea className="flex-1">
-          <div className="p-3 space-y-1">
-            {conversations.length === 0 ? (
-              <div className="text-center py-16 text-muted-foreground">
-                <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                <p className="text-sm">No conversations yet</p>
-                <p className="text-xs mt-1 opacity-70">Tap "New Conversation" to start chatting</p>
+        <ScrollArea className="flex-1 px-4 pb-6">
+          {conversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground text-center">
+              <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center mb-5 shadow-xl shadow-violet-500/25">
+                <MessageSquare className="w-7 h-7 text-white" />
               </div>
-            ) : conversations.map((conv) => (
-              <div key={conv.id}
-                className="group flex items-center justify-between p-3.5 rounded-xl cursor-pointer hover:bg-muted/60 border border-transparent hover:border-border transition-all"
-                onClick={() => handleSelect(conv.id)}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center shrink-0">
-                    <MessageSquare className="w-4 h-4 text-violet-500" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-semibold text-sm truncate">{conv.title}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{formatDistanceToNow(new Date(conv.updatedAt), { addSuffix: true })}</p>
-                  </div>
-                </div>
-                <Button variant="ghost" size="icon"
-                  className="w-7 h-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
-                  onClick={(e) => handleDelete(conv.id, e)}
+              <p className="font-bold text-sm text-foreground/60">No conversations yet</p>
+              <p className="text-xs mt-1 opacity-50">Tap "New Conversation" to start</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {conversations.map((conv) => (
+                <div key={conv.id}
+                  className="group flex items-center justify-between p-3.5 rounded-2xl border border-border bg-card hover:border-primary/20 hover:bg-muted/20 transition-all cursor-pointer active:scale-[0.98]"
+                  onClick={() => setLocation(`/chat/${conv.id}`)}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            ))}
-          </div>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center shrink-0 shadow-sm">
+                      <MessageSquare className="w-4.5 h-4.5 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm truncate tracking-tight">{conv.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{formatDistanceToNow(new Date(conv.updatedAt), { addSuffix: true })}</p>
+                    </div>
+                  </div>
+                  <button onClick={(e) => handleDelete(conv.id, e)}
+                    className="w-7 h-7 rounded-xl opacity-0 group-hover:opacity-100 flex items-center justify-center hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </ScrollArea>
       </div>
     );
   }
 
-  /* ── Desktop: sidebar + chat ── */
+  /* ── Desktop ── */
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <div className="w-64 border-r border-border shrink-0">
+      <div className="w-60 border-r border-border shrink-0">
         <ConversationList
-          conversations={conversations}
-          activeId={id}
-          onCreate={handleCreate}
-          onSelect={handleSelect}
-          onDelete={handleDelete}
-          isCreating={createMutation.isPending}
+          conversations={conversations} activeId={id}
+          onCreate={handleCreate} onSelect={(convId) => setLocation(`/chat/${convId}`)}
+          onDelete={handleDelete} isCreating={createMutation.isPending}
         />
       </div>
-
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 overflow-hidden">
         {id ? (
           <ChatWindow id={id} conversation={conversation} isLoading={isLoading} />
         ) : (
-          <div className="flex-1 h-full flex items-center justify-center text-muted-foreground flex-col gap-6 p-8">
-            <div className="bg-primary/10 text-primary p-5 rounded-full"><Bot className="w-10 h-10" /></div>
-            <div className="text-center">
-              <h2 className="text-xl font-semibold text-foreground">Welcome to Argus Chat</h2>
-              <p className="mt-2 max-w-sm text-sm opacity-70">Start a new conversation or pick one from the sidebar. You can type or use your microphone.</p>
+          <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-6 p-8">
+            <div className="relative">
+              <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-violet-500/20 to-blue-500/10 blur-2xl scale-125" />
+              <div className="relative w-20 h-20 rounded-3xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center shadow-2xl shadow-violet-500/30">
+                <Bot className="w-9 h-9 text-white" />
+              </div>
             </div>
-            <Button onClick={handleCreate} className="gap-2" disabled={createMutation.isPending}>
+            <div className="text-center">
+              <h2 className="text-2xl font-black tracking-tight text-foreground">Welcome to Argus Chat</h2>
+              <p className="mt-2 max-w-sm text-sm opacity-60 leading-relaxed">Start a new conversation or pick one from the sidebar. Type or use your microphone.</p>
+            </div>
+            <button onClick={handleCreate} disabled={createMutation.isPending}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 active:scale-95 disabled:opacity-50"
+            >
               <Plus className="w-4 h-4" /> Start a New Chat
-            </Button>
+            </button>
           </div>
         )}
       </div>
