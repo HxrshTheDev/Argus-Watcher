@@ -1,6 +1,5 @@
-import { useNotifications } from "@/hooks/use-notifications";
+import { NotificationToasts } from "@/components/notification-toasts";
 
 export function NotificationsMonitor() {
-  useNotifications();
-  return null;
+  return <NotificationToasts />;
 }

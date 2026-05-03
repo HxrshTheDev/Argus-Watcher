@@ -10,6 +10,7 @@ import workflowsRouter from "./workflows";
 import dashboardRouter from "./dashboard";
 import gmailRouter from "./gmail";
 import briefingRouter from "./briefing";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(workflowsRouter);
 router.use(dashboardRouter);
 router.use(gmailRouter);
 router.use(briefingRouter);
+router.use(notificationsRouter);
 
 export default router;
