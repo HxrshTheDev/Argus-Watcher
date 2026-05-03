@@ -40,19 +40,19 @@ function useDismissBriefing() {
 const ACTIVITY_CFG: Record<string, { icon: React.ElementType; gradient: string; route: string; label: string }> = {
   task:     { icon: CheckSquare,   gradient: "from-emerald-500 to-green-600",   route: "/tracker",   label: "Task" },
   chat:     { icon: MessageSquare, gradient: "from-violet-500 to-violet-600",   route: "/chat",      label: "Chat" },
-  research: { icon: Search,        gradient: "from-orange-500 to-amber-600",    route: "/research",  label: "Research" },
+  research: { icon: Search,        gradient: "from-purple-500 to-indigo-600",   route: "/research",  label: "Research" },
   email:    { icon: Mail,          gradient: "from-red-500 to-rose-600",        route: "/email",     label: "Email" },
   post:     { icon: Share2,        gradient: "from-pink-500 to-rose-500",       route: "/posts",     label: "Post" },
-  workflow: { icon: Zap,           gradient: "from-yellow-500 to-amber-500",    route: "/workflows", label: "Workflow" },
+  workflow: { icon: Zap,           gradient: "from-cyan-500 to-sky-600",        route: "/workflows", label: "Workflow" },
 };
 
 const MODULES = [
   { url: "/chat",      label: "Chat",      desc: "AI conversations",    icon: MessageSquare, gradient: "from-violet-500 to-purple-600",   glow: "shadow-violet-500/30" },
   { url: "/tracker",   label: "Tracker",   desc: "Tasks & goals",       icon: BarChart2,     gradient: "from-teal-500 to-emerald-600",    glow: "shadow-teal-500/30" },
-  { url: "/research",  label: "Research",  desc: "Notebooks & sources", icon: BookOpen,      gradient: "from-orange-500 to-amber-600",    glow: "shadow-orange-500/30" },
+  { url: "/research",  label: "Research",  desc: "Notebooks & sources", icon: BookOpen,      gradient: "from-purple-500 to-indigo-600",   glow: "shadow-purple-500/30" },
   { url: "/email",     label: "Email",     desc: "Inbox & drafts",      icon: Mail,          gradient: "from-red-500 to-rose-600",        glow: "shadow-red-500/30" },
   { url: "/posts",     label: "Posts",     desc: "Social content",      icon: Share2,        gradient: "from-pink-500 to-rose-500",       glow: "shadow-pink-500/30" },
-  { url: "/workflows", label: "Flows",     desc: "Automations",         icon: Zap,           gradient: "from-yellow-500 to-amber-500",    glow: "shadow-yellow-500/30" },
+  { url: "/workflows", label: "Flows",     desc: "Automations",         icon: Zap,           gradient: "from-cyan-500 to-sky-600",        glow: "shadow-cyan-500/30" },
 ];
 
 /* ── Live clock widget (isolated so only IT re-renders every second) ── */
@@ -250,7 +250,14 @@ function BriefingCard() {
   const [expanded, setExpanded] = useState(false);
   const priorities = briefing?.priorities.split("\n").map(p => p.trim()).filter(Boolean) ?? [];
 
-  if (isLoading) return <div className="h-28 rounded-2xl shimmer" />;
+  // Auto-generate on first visit each morning if no briefing exists
+  useEffect(() => {
+    if (!isLoading && briefing === null && !generate.isPending && !generate.isSuccess) {
+      generate.mutate();
+    }
+  }, [isLoading, briefing]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isLoading || generate.isPending) return <div className="h-28 rounded-2xl shimmer" />;
 
   if (!briefing) {
     return (
@@ -421,9 +428,9 @@ export default function Dashboard() {
                 <StatCard label="Chats" value={stats.totalConversations ?? 0} icon={MessageSquare}
                   gradient="from-violet-500 to-purple-600" glow="shadow-violet-500/30" href="/chat" />
                 <StatCard label="Research" value={stats.totalResearchNotes ?? 0} icon={Search}
-                  gradient="from-orange-500 to-amber-600" glow="shadow-orange-500/30" href="/research" />
+                  gradient="from-purple-500 to-indigo-600" glow="shadow-purple-500/30" href="/research" />
                 <StatCard label="Workflows" value={stats.activeWorkflows ?? 0} icon={Zap}
-                  gradient="from-yellow-500 to-amber-500" glow="shadow-yellow-500/30" href="/workflows"
+                  gradient="from-cyan-500 to-sky-600" glow="shadow-cyan-500/30" href="/workflows"
                   sub={`of ${stats.totalWorkflows ?? 0} total`}
                 />
               </div>

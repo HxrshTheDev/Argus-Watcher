@@ -17,10 +17,10 @@ const NAV_ITEMS = [
   { title: "Dashboard", url: "/",          icon: LayoutDashboard, gradient: "from-blue-500 to-indigo-600" },
   { title: "Chat",      url: "/chat",      icon: MessageSquare,   gradient: "from-violet-500 to-purple-600" },
   { title: "Tracker",   url: "/tracker",   icon: BarChart2,       gradient: "from-teal-500 to-emerald-600" },
-  { title: "Research",  url: "/research",  icon: Search,          gradient: "from-orange-500 to-amber-600" },
+  { title: "Research",  url: "/research",  icon: Search,          gradient: "from-purple-500 to-indigo-600" },
   { title: "Email",     url: "/email",     icon: Mail,            gradient: "from-red-500 to-rose-600" },
   { title: "Posts",     url: "/posts",     icon: Share2,          gradient: "from-pink-500 to-rose-500" },
-  { title: "Workflows", url: "/workflows", icon: Zap,             gradient: "from-yellow-500 to-amber-500" },
+  { title: "Workflows", url: "/workflows", icon: Zap,             gradient: "from-cyan-500 to-sky-600" },
 ] as const;
 
 export default function AppSidebar() {
