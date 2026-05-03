@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/sidebar";
 import {
   LayoutDashboard, MessageSquare, CheckSquare, Search, Mail,
-  Share2, Zap, Moon, Sun, Bell,
+  Share2, Zap, Moon, Sun, Bell, BarChart2,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useListTasks } from "@workspace/api-client-react";
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { title: "Dashboard", url: "/",          icon: LayoutDashboard, gradient: "from-blue-500 to-blue-600" },
   { title: "Chat",      url: "/chat",      icon: MessageSquare,   gradient: "from-violet-500 to-violet-600" },
   { title: "Tasks",     url: "/tasks",     icon: CheckSquare,     gradient: "from-emerald-500 to-green-600" },
+  { title: "Tracker",   url: "/tracker",   icon: BarChart2,       gradient: "from-teal-500 to-emerald-600" },
   { title: "Research",  url: "/research",  icon: Search,          gradient: "from-orange-500 to-amber-600" },
   { title: "Email",     url: "/email",     icon: Mail,            gradient: "from-red-500 to-rose-600" },
   { title: "Posts",     url: "/posts",     icon: Share2,          gradient: "from-pink-500 to-rose-500" },
