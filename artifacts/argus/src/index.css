@@ -67,60 +67,66 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   LIGHT MODE — Refined professional slate / Linear-inspired
+   LIGHT MODE — VisionOS / Liquid Glass — sky-blue palette
    ══════════════════════════════════════════════════════════ */
 :root {
-  --button-outline: rgba(0,0,0,.07);
+  --button-outline: rgba(0,0,0,.06);
   --badge-outline: rgba(0,0,0,.04);
 
-  /* Page background — light cool-gray, not stark white */
-  --background: 210 18% 96%;
-  --foreground: 215 28% 10%;
+  /* Background — bright sky-blue, like a clear afternoon */
+  --background: 204 68% 91%;
+  --foreground: 215 50% 10%;
 
-  /* Cards — pure white surface */
+  /* Cards — frosted white glass */
   --card: 0 0% 100%;
-  --card-foreground: 215 28% 10%;
-  --card-border: 214 16% 90%;
+  --card-foreground: 215 50% 10%;
+  --card-border: 210 40% 86%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 215 28% 10%;
-  --popover-border: 214 16% 88%;
+  --popover-foreground: 215 50% 10%;
+  --popover-border: 210 35% 84%;
 
-  --border: 214 16% 88%;
-  --input: 214 16% 90%;
-  --ring: 217 91% 56%;
+  --border: 210 32% 83%;
+  --input: 210 35% 90%;
+  --ring: 207 88% 48%;
 
-  /* Primary — Linear/Vercel-quality blue */
-  --primary: 217 91% 56%;
+  /* Primary — deep ocean blue */
+  --primary: 207 88% 47%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 213 14% 93%;
-  --secondary-foreground: 215 28% 10%;
+  --secondary: 210 35% 92%;
+  --secondary-foreground: 215 50% 10%;
 
-  --muted: 213 14% 93%;
-  --muted-foreground: 215 16% 44%;
+  --muted: 210 30% 92%;
+  --muted-foreground: 215 20% 42%;
 
-  --accent: 213 14% 93%;
-  --accent-foreground: 215 28% 10%;
+  --accent: 210 32% 91%;
+  --accent-foreground: 215 50% 10%;
 
   --destructive: 0 82% 57%;
   --destructive-foreground: 0 0% 100%;
 
-  /* Sidebar — pure white, clean boundary */
-  --sidebar: 0 0% 100%;
-  --sidebar-foreground: 215 25% 12%;
-  --sidebar-border: 214 14% 91%;
-  --sidebar-primary: 217 91% 56%;
+  /* Sidebar — slightly deeper sky blue */
+  --sidebar: 205 50% 86%;
+  --sidebar-foreground: 215 45% 12%;
+  --sidebar-border: 210 30% 80%;
+  --sidebar-primary: 207 88% 47%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 213 12% 93%;
-  --sidebar-accent-foreground: 215 25% 12%;
-  --sidebar-ring: 217 91% 56%;
+  --sidebar-accent: 210 38% 90%;
+  --sidebar-accent-foreground: 215 45% 12%;
+  --sidebar-ring: 207 88% 47%;
 
-  --chart-1: 217 91% 56%;
-  --chart-2: 160 60% 38%;
+  --chart-1: 207 88% 47%;
+  --chart-2: 185 72% 40%;
   --chart-3: 30 80% 50%;
   --chart-4: 280 65% 56%;
   --chart-5: 340 75% 52%;
+
+  /* Blob colors for AppBackground */
+  --blob-1: 205 85% 70%;
+  --blob-2: 186 78% 63%;
+  --blob-3: 222 74% 77%;
+  --blob-4: 168 68% 70%;
 
   --app-font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
   --app-font-serif: 'New York', Georgia, serif;
@@ -129,60 +135,66 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   DARK MODE — True professional dark / Things 3 × Linear
+   DARK MODE — iOS warm wine / burgundy / rose
    ══════════════════════════════════════════════════════════ */
 .dark {
   --button-outline: rgba(255,255,255,.07);
   --badge-outline: rgba(255,255,255,.04);
 
-  /* Deep neutral slate — no blue bleed */
-  --background: 220 14% 6%;
-  --foreground: 210 16% 92%;
+  /* Deep warm wine-black */
+  --background: 340 22% 5%;
+  --foreground: 20 18% 93%;
 
-  /* Cards — subtly elevated above bg */
-  --card: 220 12% 10%;
-  --card-foreground: 210 16% 92%;
-  --card-border: 220 12% 16%;
+  /* Cards — dark warm glass */
+  --card: 340 16% 10%;
+  --card-foreground: 20 18% 93%;
+  --card-border: 340 12% 18%;
 
-  --popover: 220 12% 11%;
-  --popover-foreground: 210 16% 92%;
-  --popover-border: 220 12% 18%;
+  --popover: 340 16% 11%;
+  --popover-foreground: 20 18% 93%;
+  --popover-border: 340 12% 20%;
 
-  --border: 220 12% 15%;
-  --input: 220 12% 13%;
-  --ring: 217 91% 62%;
+  --border: 340 10% 17%;
+  --input: 340 12% 13%;
+  --ring: 348 72% 60%;
 
-  /* Primary — vivid clean blue, same hue as light */
-  --primary: 217 91% 62%;
+  /* Primary — vivid rose red */
+  --primary: 348 72% 58%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 220 12% 12%;
-  --secondary-foreground: 210 16% 92%;
+  --secondary: 340 14% 13%;
+  --secondary-foreground: 20 18% 93%;
 
-  --muted: 220 12% 12%;
-  --muted-foreground: 220 10% 50%;
+  --muted: 340 14% 13%;
+  --muted-foreground: 20 8% 50%;
 
-  --accent: 220 12% 13%;
-  --accent-foreground: 210 16% 92%;
+  --accent: 340 14% 14%;
+  --accent-foreground: 20 18% 93%;
 
-  --destructive: 0 82% 60%;
+  --destructive: 0 82% 62%;
   --destructive-foreground: 0 0% 100%;
 
-  /* Sidebar — darker than card, anchoring the layout */
-  --sidebar: 220 16% 4%;
-  --sidebar-foreground: 210 14% 88%;
-  --sidebar-border: 220 12% 10%;
-  --sidebar-primary: 217 91% 62%;
+  /* Sidebar — darkest wine, nearly black */
+  --sidebar: 340 26% 4%;
+  --sidebar-foreground: 20 14% 88%;
+  --sidebar-border: 340 14% 11%;
+  --sidebar-primary: 348 72% 58%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 12% 9%;
-  --sidebar-accent-foreground: 210 14% 88%;
-  --sidebar-ring: 217 91% 62%;
+  --sidebar-accent: 340 16% 9%;
+  --sidebar-accent-foreground: 20 14% 88%;
+  --sidebar-ring: 348 72% 58%;
 
-  --chart-1: 217 91% 62%;
+  --chart-1: 348 72% 58%;
   --chart-2: 160 58% 44%;
   --chart-3: 32 80% 54%;
   --chart-4: 280 62% 60%;
-  --chart-5: 340 72% 55%;
+  --chart-5: 25 75% 52%;
+
+  /* Blob colors for AppBackground */
+  --blob-1: 348 88% 44%;
+  --blob-2: 24 88% 46%;
+  --blob-3: 316 78% 36%;
+  --blob-4: 4 80% 34%;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -206,7 +218,6 @@
     letter-spacing: -0.012em;
   }
 
-  /* Refined thin scrollbar */
   ::-webkit-scrollbar { width: 3px; height: 3px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
@@ -214,7 +225,6 @@
 
   input:focus, textarea:focus, select:focus { outline: none; }
 
-  /* Date/time inputs — inherit theme colors */
   input[type="date"],
   input[type="time"] {
     color-scheme: dark;
@@ -229,16 +239,43 @@
    UTILITIES
    ══════════════════════════════════════════════════════════ */
 @layer utilities {
+  /* Glass effects */
   .glass {
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
   }
   .glass-sm {
-    backdrop-filter: blur(12px) saturate(140%);
-    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    backdrop-filter: blur(14px) saturate(150%);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+  }
+  .glass-xl {
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
   }
 
-  /* Standard card */
+  /* Glass cards — frosted white in light, dark warm in dark */
+  .glass-card {
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(255,255,255,0.75);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
+  }
+  .dark .glass-card {
+    background: rgba(45,18,26,0.55);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  /* Glass sidebar — stronger blur */
+  .glass-sidebar {
+    backdrop-filter: blur(40px) saturate(200%);
+    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    background: hsl(var(--sidebar) / 0.78) !important;
+    border-right: 1px solid hsl(var(--sidebar-border) / 0.6) !important;
+  }
+
+  /* Standard surface */
   .surface {
     @apply rounded-2xl border border-card-border bg-card;
   }
@@ -247,9 +284,12 @@
     box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.08);
   }
 
-  /* Gradient text */
+  /* Gradient text — adapts to theme */
   .gradient-text {
     @apply bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent;
+  }
+  .dark .gradient-text {
+    @apply from-rose-400 to-orange-400;
   }
 
   /* Shimmer skeleton */
@@ -264,20 +304,28 @@
     animation: shimmer 1.7s ease-in-out infinite;
   }
 
-  /* Subtle primary glow */
   .glow-primary {
-    box-shadow: 0 0 18px hsl(var(--primary) / 0.2), 0 0 36px hsl(var(--primary) / 0.08);
+    box-shadow: 0 0 18px hsl(var(--primary) / 0.25), 0 0 40px hsl(var(--primary) / 0.10);
   }
 
   .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
   .animate-in { animation-fill-mode: both; }
 
-  /* Scheduled time pill */
   .time-chip {
     @apply inline-flex items-center gap-1 text-[11px] font-semibold
            px-1.5 py-0.5 rounded-md
            bg-primary/8 text-primary/80;
   }
+}
+
+/* ══════════════════════════════════════════════════════════
+   SIDEBAR GLASS OVERRIDE — target shadcn sidebar data attr
+   ══════════════════════════════════════════════════════════ */
+[data-sidebar="sidebar"] {
+  backdrop-filter: blur(40px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(200%) !important;
+  background: hsl(var(--sidebar) / 0.80) !important;
+  border-right: 1px solid hsl(var(--sidebar-border) / 0.55) !important;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -312,7 +360,7 @@
   background: hsl(220 14% 8%);
 }
 .dark .chat-prose pre {
-  background: hsl(220 14% 5%);
+  background: hsl(340 16% 6%);
 }
 .chat-prose pre code {
   @apply block px-4 py-3 text-[13px] font-mono leading-relaxed overflow-x-auto;
@@ -345,6 +393,26 @@
 @keyframes slide-down-fade {
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes blob-drift-1 {
+  0%,100% { transform: translate(0px, 0px) scale(1); }
+  33%     { transform: translate(60px, -40px) scale(1.06); }
+  66%     { transform: translate(-30px, 30px) scale(0.96); }
+}
+@keyframes blob-drift-2 {
+  0%,100% { transform: translate(0px, 0px) scale(1); }
+  33%     { transform: translate(-70px, 40px) scale(1.04); }
+  66%     { transform: translate(40px, -50px) scale(0.97); }
+}
+@keyframes blob-drift-3 {
+  0%,100% { transform: translate(0px, 0px) scale(1); }
+  33%     { transform: translate(50px, 60px) scale(1.05); }
+  66%     { transform: translate(-60px, -30px) scale(0.95); }
+}
+@keyframes blob-drift-4 {
+  0%,100% { transform: translate(0px, 0px) scale(1); }
+  33%     { transform: translate(-40px, -60px) scale(1.03); }
+  66%     { transform: translate(60px, 40px) scale(0.98); }
 }
 
 /* ══════════════════════════════════════════════════════════

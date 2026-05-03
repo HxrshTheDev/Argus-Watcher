@@ -14,6 +14,7 @@ import Email from "@/pages/email";
 import Posts from "@/pages/posts";
 import Workflows from "@/pages/workflows";
 import AppSidebar from "@/components/app-sidebar";
+import { AppBackground } from "@/components/AppBackground";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { NotificationsMonitor } from "@/components/notifications-monitor";
 import {
@@ -53,8 +54,8 @@ function MobileBottomNav() {
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50">
-      {/* Blur backdrop */}
-      <div className="absolute inset-0 glass bg-background/80 border-t border-border/60" />
+      {/* Glass backdrop */}
+      <div className="absolute inset-0 glass-xl bg-background/65 border-t border-white/20 dark:border-white/8" />
 
       <div className="relative flex items-center justify-around px-1 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
         {NAV.map((item) => {
@@ -100,7 +101,10 @@ function Router() {
   return (
     <SidebarProvider>
       <NotificationsMonitor />
-      <div className="flex h-[100dvh] w-full bg-background overflow-hidden text-foreground">
+      {/* Full-screen animated background — behind everything */}
+      <AppBackground />
+
+      <div className="flex h-[100dvh] w-full overflow-hidden text-foreground bg-transparent">
         {/* Desktop sidebar */}
         <div className="hidden md:contents">
           <AppSidebar />

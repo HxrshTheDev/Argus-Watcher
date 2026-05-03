@@ -14,8 +14,8 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { useMemo } from "react";
 
 const NAV_ITEMS = [
-  { title: "Dashboard", url: "/",          icon: LayoutDashboard, gradient: "from-blue-500 to-blue-600" },
-  { title: "Chat",      url: "/chat",      icon: MessageSquare,   gradient: "from-violet-500 to-violet-600" },
+  { title: "Dashboard", url: "/",          icon: LayoutDashboard, gradient: "from-blue-500 to-indigo-600" },
+  { title: "Chat",      url: "/chat",      icon: MessageSquare,   gradient: "from-violet-500 to-purple-600" },
   { title: "Tracker",   url: "/tracker",   icon: BarChart2,       gradient: "from-teal-500 to-emerald-600" },
   { title: "Research",  url: "/research",  icon: Search,          gradient: "from-orange-500 to-amber-600" },
   { title: "Email",     url: "/email",     icon: Mail,            gradient: "from-red-500 to-rose-600" },
@@ -48,31 +48,32 @@ export default function AppSidebar() {
     <Sidebar variant="inset">
       {/* ── Brand header ─────────────────────────────────── */}
       <SidebarHeader className="px-4 pt-5 pb-4">
-        {/* Accent gradient bar */}
-        <div className="h-px w-full bg-gradient-to-r from-blue-500/0 via-primary/60 to-violet-500/0 mb-4 rounded-full" />
+        {/* Gradient separator */}
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/50 to-transparent mb-4 rounded-full" />
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* Logo orb */}
             <div className="relative w-9 h-9 shrink-0">
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 shadow-lg shadow-blue-500/30" />
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary to-violet-600 shadow-lg shadow-primary/30" />
               <div className="absolute inset-0 rounded-xl flex items-center justify-center">
                 <span className="text-white font-black text-[15px] tracking-tight leading-none">A</span>
               </div>
-              <div className="absolute inset-0 rounded-xl ring-1 ring-white/10" />
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-white/25 to-transparent" />
+              <div className="absolute inset-0 rounded-xl ring-1 ring-white/15" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-[15px] tracking-tight leading-none">Argus</span>
               </div>
-              <span className="text-[11px] text-muted-foreground/70 mt-0.5 block">Personal AI</span>
+              <span className="text-[11px] text-muted-foreground/60 mt-0.5 block font-medium">Personal AI</span>
             </div>
           </div>
 
           {/* Notification bell */}
           {notifications.length > 0 && (
             <div className="relative">
-              <div className="w-8 h-8 rounded-xl bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl glass-card flex items-center justify-center border-destructive/20">
                 <Bell className="w-3.5 h-3.5 text-destructive" />
               </div>
               <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[9px] font-bold flex items-center justify-center leading-none">
@@ -101,8 +102,8 @@ export default function AppSidebar() {
                       className={`
                         h-[42px] rounded-xl font-medium transition-all duration-200 group/nav
                         ${active
-                          ? "bg-primary/10 text-primary hover:bg-primary/12"
-                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                          ? "bg-primary/12 text-primary hover:bg-primary/15"
+                          : "text-sidebar-foreground/75 hover:bg-white/10 dark:hover:bg-white/6 hover:text-sidebar-foreground"
                         }
                       `}
                     >
@@ -110,24 +111,22 @@ export default function AppSidebar() {
                         {/* Icon container */}
                         <div className={`
                           relative w-7 h-7 rounded-[8px] flex items-center justify-center shrink-0
-                          transition-all duration-200
-                          ${active
-                            ? `bg-gradient-to-br ${item.gradient} shadow-sm`
-                            : `bg-gradient-to-br ${item.gradient} opacity-80 group-hover/nav:opacity-100`
-                          }
+                          transition-all duration-200 shadow-sm
+                          bg-gradient-to-br ${item.gradient}
+                          ${active ? "opacity-100 scale-100" : "opacity-70 group-hover/nav:opacity-100 group-hover/nav:scale-105"}
                         `}>
                           <item.icon className="w-3.5 h-3.5 text-white" />
                           {/* Shine overlay */}
-                          <div className="absolute inset-0 rounded-[8px] bg-gradient-to-b from-white/20 to-transparent" />
+                          <div className="absolute inset-0 rounded-[8px] bg-gradient-to-b from-white/25 to-transparent" />
                         </div>
 
-                        <span className={`text-[13.5px] font-medium tracking-tight flex-1 ${active ? "text-primary" : ""}`}>
+                        <span className={`text-[13.5px] font-medium tracking-tight flex-1 ${active ? "font-semibold" : ""}`}>
                           {item.title}
                         </span>
 
-                        {/* Active indicator dot */}
+                        {/* Active indicator */}
                         {active && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary/70 shrink-0" />
                         )}
                       </Link>
                     </SidebarMenuButton>
@@ -147,18 +146,23 @@ export default function AppSidebar() {
 
       {/* ── Footer ───────────────────────────────────────── */}
       <SidebarFooter className="px-3 pb-5">
-        <div className="h-px bg-sidebar-border mb-3" />
+        <div className="h-px bg-sidebar-border/50 mb-3" />
         <button
           onClick={() => setTheme(isDark ? "light" : "dark")}
-          className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl hover:bg-sidebar-accent transition-colors duration-150 group/theme"
+          className="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-xl hover:bg-white/10 dark:hover:bg-white/6 transition-colors duration-150 group/theme"
         >
-          <div className="w-7 h-7 rounded-[8px] bg-gradient-to-br from-slate-500 to-slate-700 flex items-center justify-center shadow-sm relative overflow-hidden shrink-0">
+          <div className={`
+            w-7 h-7 rounded-[8px] flex items-center justify-center shadow-sm relative overflow-hidden shrink-0
+            ${isDark
+              ? "bg-gradient-to-br from-amber-400 to-orange-500"
+              : "bg-gradient-to-br from-slate-600 to-slate-800"}
+          `}>
             {isDark
-              ? <Sun className="w-3.5 h-3.5 text-yellow-300" />
+              ? <Sun className="w-3.5 h-3.5 text-white" />
               : <Moon className="w-3.5 h-3.5 text-white" />}
-            <div className="absolute inset-0 rounded-[8px] bg-gradient-to-b from-white/15 to-transparent" />
+            <div className="absolute inset-0 rounded-[8px] bg-gradient-to-b from-white/25 to-transparent" />
           </div>
-          <span className="text-[13.5px] font-medium text-sidebar-foreground/80 group-hover/theme:text-sidebar-foreground tracking-tight">
+          <span className="text-[13.5px] font-medium text-sidebar-foreground/70 group-hover/theme:text-sidebar-foreground tracking-tight transition-colors">
             {isDark ? "Light Mode" : "Dark Mode"}
           </span>
         </button>
