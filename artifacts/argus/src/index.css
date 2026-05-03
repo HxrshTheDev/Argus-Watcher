@@ -281,6 +281,49 @@
 }
 
 /* ══════════════════════════════════════════════════════════
+   CHAT PROSE — markdown rendered in AI messages
+   ══════════════════════════════════════════════════════════ */
+.chat-prose { @apply text-foreground; }
+.chat-prose p { @apply my-2 leading-7; }
+.chat-prose p:first-child { @apply mt-0; }
+.chat-prose p:last-child  { @apply mb-0; }
+.chat-prose h1 { @apply text-lg font-bold mt-5 mb-2 leading-tight tracking-tight; }
+.chat-prose h2 { @apply text-base font-bold mt-4 mb-2 leading-tight tracking-tight; }
+.chat-prose h3 { @apply text-sm font-semibold mt-3 mb-1.5 leading-tight; }
+.chat-prose ul { @apply pl-5 my-2 space-y-1; list-style-type: disc; }
+.chat-prose ol { @apply pl-5 my-2 space-y-1; list-style-type: decimal; }
+.chat-prose li { @apply text-[14px] leading-relaxed; }
+.chat-prose li > ul, .chat-prose li > ol { @apply mt-1 mb-0; }
+.chat-prose strong { @apply font-semibold text-foreground; }
+.chat-prose em { @apply italic text-foreground/90; }
+.chat-prose a { @apply text-primary underline underline-offset-2 hover:text-primary/80 transition-colors; }
+.chat-prose hr { @apply my-4 border-border; }
+.chat-prose blockquote {
+  @apply pl-4 my-3 text-muted-foreground italic;
+  border-left: 3px solid hsl(var(--border));
+}
+.chat-prose code:not(pre code) {
+  @apply px-1.5 py-0.5 rounded-md text-[13px] font-mono;
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+.chat-prose pre {
+  @apply my-3 rounded-xl overflow-hidden;
+  background: hsl(220 14% 8%);
+}
+.dark .chat-prose pre {
+  background: hsl(220 14% 5%);
+}
+.chat-prose pre code {
+  @apply block px-4 py-3 text-[13px] font-mono leading-relaxed overflow-x-auto;
+  color: hsl(210 16% 88%);
+  background: transparent;
+}
+.chat-prose table { @apply w-full my-3 text-sm border-collapse; }
+.chat-prose th { @apply px-3 py-2 text-left font-semibold border-b border-border bg-muted/50; }
+.chat-prose td { @apply px-3 py-2 border-b border-border/50; }
+
+/* ══════════════════════════════════════════════════════════
    KEYFRAMES
    ══════════════════════════════════════════════════════════ */
 @keyframes shimmer {

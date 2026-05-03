@@ -14,7 +14,7 @@ import {
   CheckCircle2, Circle, Timer, Play, Pause, RotateCcw,
   ChevronRight, ChevronLeft, CalendarDays, Clock, Pencil,
   Sparkles, LayoutDashboard, CheckSquare, BarChart2, Coffee,
-  AlertCircle, Hourglass, CalendarClock, GripVertical,
+  AlertCircle, Hourglass, CalendarClock, GripVertical, Keyboard,
 } from "lucide-react";
 
 /* ─────────────────────────────────────────────────────────
@@ -1737,11 +1737,76 @@ function HabitsTab() {
 }
 
 /* ─────────────────────────────────────────────────────────
+   KEYBOARD SHORTCUTS MODAL
+───────────────────────────────────────────────────────── */
+const SHORTCUTS = [
+  { keys: ["?"],       desc: "Toggle this shortcuts panel" },
+  { keys: ["O"],       desc: "Switch to Overview tab" },
+  { keys: ["T"],       desc: "Switch to Tasks tab" },
+  { keys: ["H"],       desc: "Switch to Habits tab" },
+  { keys: ["N"],       desc: "Focus the new task input" },
+  { keys: ["Esc"],     desc: "Close panels / dismiss" },
+  { keys: ["↵"],       desc: "Submit form / confirm" },
+  { keys: ["⇧", "↵"], desc: "New line in text fields" },
+];
+
+function ShortcutsModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200"
+        onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Keyboard className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <span className="text-[14px] font-semibold tracking-tight">Keyboard Shortcuts</span>
+          </div>
+          <button onClick={onClose}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {/* List */}
+        <div className="px-3 py-3 space-y-0.5">
+          {SHORTCUTS.map(({ keys, desc }) => (
+            <div key={desc} className="flex items-center justify-between px-2 py-2.5 rounded-lg hover:bg-muted/40 transition-colors">
+              <span className="text-[13px] text-muted-foreground">{desc}</span>
+              <div className="flex items-center gap-1">
+                {keys.map(k => (
+                  <kbd key={k}
+                    className="px-2 py-1 rounded-md border border-border bg-muted text-[11px] font-mono font-semibold text-foreground shadow-sm leading-none">
+                    {k}
+                  </kbd>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="px-5 py-3 border-t border-border/50 bg-muted/20">
+          <p className="text-[11px] text-muted-foreground/60 text-center">
+            Press <kbd className="px-1.5 py-0.5 rounded border border-border bg-muted text-[10px] font-mono">?</kbd> anywhere in Tracker to show this
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────
    TAB BAR
 ───────────────────────────────────────────────────────── */
-function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+function TabBar({ tab, setTab, onShowShortcuts }: { tab: Tab; setTab: (t: Tab) => void; onShowShortcuts: () => void }) {
   return (
-    <div className="flex items-center gap-1 px-4 py-2 border-b border-border bg-card/80 backdrop-blur-sm shrink-0">
+    <div className="flex items-center gap-1 px-3 py-2 border-b border-border bg-card/80 backdrop-blur-sm shrink-0">
       {TAB_DEFS.map(([v, l, icon]) => (
         <button key={v} onClick={() => setTab(v)}
           className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all
@@ -1749,6 +1814,11 @@ function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
           {icon}{l}
         </button>
       ))}
+      <div className="flex-1" />
+      <button onClick={onShowShortcuts} title="Keyboard shortcuts (?)"
+        className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/50 transition-all">
+        <Keyboard className="w-3.5 h-3.5" />
+      </button>
     </div>
   );
 }
@@ -1757,7 +1827,26 @@ function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
    ROOT
 ───────────────────────────────────────────────────────── */
 export default function Tracker() {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab]             = useState<Tab>("overview");
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const inInput = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+      if (inInput && e.key !== "Escape") return;
+      switch (e.key) {
+        case "?": setShowShortcuts(p => !p); break;
+        case "Escape": setShowShortcuts(false); break;
+        case "o": case "O": if (!inInput) setTab("overview"); break;
+        case "t": case "T": if (!inInput) setTab("tasks"); break;
+        case "h": case "H": if (!inInput) setTab("habits"); break;
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
   const queryClient = useQueryClient();
   const { data: tasks = [], isLoading } = useListTasks({});
@@ -1818,27 +1907,31 @@ export default function Tracker() {
 
   const goToTasks = useCallback(() => setTab("tasks"), []);
 
+  const showModal = showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />;
+
   if (tab === "tasks") {
     return (
       <div className="h-full flex flex-col bg-background">
-        <TabBar tab={tab} setTab={setTab} />
+        <TabBar tab={tab} setTab={setTab} onShowShortcuts={() => setShowShortcuts(true)} />
         <div className="flex-1 min-h-0 overflow-hidden">
           <TasksTab tasks={tasks} isLoading={isLoading} timer={timer}
             onToggle={handleToggle} onUpdate={handleUpdate} onDelete={handleDelete} onCreate={handleCreate} />
         </div>
+        {showModal}
       </div>
     );
   }
 
   return (
     <div className="h-full flex flex-col bg-background overflow-hidden">
-      <TabBar tab={tab} setTab={setTab} />
+      <TabBar tab={tab} setTab={setTab} onShowShortcuts={() => setShowShortcuts(true)} />
       <div className="flex-1 min-h-0 overflow-hidden">
         {tab === "overview" && (
           <OverviewTab tasks={tasks} now={now} onGoToTasks={goToTasks} onUpdate={handleUpdate} onToggle={handleToggle} timer={timer} />
         )}
         {tab === "habits" && <HabitsTab />}
       </div>
+      {showModal}
     </div>
   );
 }

@@ -76,6 +76,8 @@
     "zod": "catalog:"
   },
   "dependencies": {
-    "@types/dom-speech-recognition": "^0.0.10"
+    "@types/dom-speech-recognition": "^0.0.10",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   }
 }
