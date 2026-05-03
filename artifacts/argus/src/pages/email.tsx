@@ -1,613 +1,470 @@
-import { useState } from "react";
-import { 
-  useListEmailDrafts, 
-  useCreateEmailDraft, 
-  useGenerateEmailDraft, 
-  useSummarizeEmail, 
-  useDeleteEmailDraft,
-  getListEmailDraftsQueryKey
-} from "@workspace/api-client-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Loader2, Plus, Send, Trash2, Sparkles, AlertTriangle, Search, Inbox, Reply, RefreshCw, Eye, CheckCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useToast } from "@/hooks/use-toast";
+import {
+  Mail, Sparkles, Trash2, Copy, Check, Loader2,
+  Plus, FileText, ChevronRight, X, Lightbulb,
+  ArrowRight, MailOpen,
+} from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-interface GmailMessage {
-  id: string;
-  threadId: string;
-  snippet: string;
+/* ─── Types ──────────────────────────────────────────────── */
+interface Draft {
+  id: number;
   subject: string;
-  from: string;
-  date: string;
-  isUnread: boolean;
-}
-
-interface GmailFullMessage extends GmailMessage {
-  to: string;
   body: string;
+  recipient?: string | null;
+  context?: string | null;
+  status: string;
+  createdAt: string;
 }
 
-function useGmailInbox() {
-  return useQuery<{ messages: GmailMessage[] }>({
-    queryKey: ["gmail", "inbox"],
+interface GeneratedDraft { subject: string; body: string }
+interface Summary { summary: string; keyPoints: string[]; actionRequired: boolean }
+
+/* ─── Tone config ─────────────────────────────────────────── */
+const TONES = [
+  { id: "professional", label: "Professional", emoji: "💼" },
+  { id: "casual",       label: "Casual",       emoji: "😊" },
+  { id: "formal",       label: "Formal",       emoji: "🎩" },
+  { id: "friendly",     label: "Friendly",     emoji: "👋" },
+  { id: "assertive",    label: "Assertive",    emoji: "🎯" },
+];
+
+/* ─── API hooks ──────────────────────────────────────────── */
+function useDrafts() {
+  return useQuery<Draft[]>({
+    queryKey: ["email-drafts"],
     queryFn: async () => {
-      const res = await fetch(`${BASE}/api/gmail/inbox?maxResults=15`);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error ?? "Failed to fetch inbox");
-      }
-      return res.json();
+      const r = await fetch(`${BASE}/api/emails`);
+      return r.json();
     },
-    retry: false,
   });
 }
 
-function useGmailMessage(id: string | null) {
-  return useQuery<GmailFullMessage>({
-    queryKey: ["gmail", "message", id],
-    queryFn: async () => {
-      const res = await fetch(`${BASE}/api/gmail/messages/${id}`);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Unknown error" }));
-        throw new Error(err.error ?? "Failed to fetch message");
-      }
-      return res.json();
+function useGenerateDraft() {
+  return useMutation<GeneratedDraft, Error, { context: string; recipient: string; tone: string }>({
+    mutationFn: async (data) => {
+      const r = await fetch(`${BASE}/api/emails/draft`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+      });
+      return r.json();
     },
-    enabled: !!id,
-    retry: false,
   });
 }
 
-export default function Email() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("inbox");
-  
-  const [context, setContext] = useState("");
+function useSummarize() {
+  return useMutation<Summary, Error, { content: string; subject?: string; sender?: string }>({
+    mutationFn: async (data) => {
+      const r = await fetch(`${BASE}/api/emails/summarize`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+      });
+      return r.json();
+    },
+  });
+}
+
+function useSaveDraft() {
+  const qc = useQueryClient();
+  return useMutation<Draft, Error, { subject: string; body: string; recipient: string; context: string }>({
+    mutationFn: async (data) => {
+      const r = await fetch(`${BASE}/api/emails`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+      });
+      return r.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["email-drafts"] }),
+  });
+}
+
+function useDeleteDraft() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, number>({
+    mutationFn: async (id) => { await fetch(`${BASE}/api/emails/${id}`, { method: "DELETE" }); },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["email-drafts"] }),
+  });
+}
+
+/* ─── Copy button ────────────────────────────────────────── */
+function CopyButton({ text, className = "" }: { text: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button onClick={copy} className={`p-1.5 rounded-lg hover:bg-muted transition-all text-muted-foreground hover:text-foreground ${className}`}>
+      {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
+/* ─── Draft detail panel ─────────────────────────────────── */
+function DraftDetail({ draft, onDelete }: { draft: Draft; onDelete: () => void }) {
+  const deleteDraft = useDeleteDraft();
+
+  const fullText = draft.recipient
+    ? `To: ${draft.recipient}\nSubject: ${draft.subject}\n\n${draft.body}`
+    : `Subject: ${draft.subject}\n\n${draft.body}`;
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-bold text-base leading-tight">{draft.subject}</h2>
+          {draft.recipient && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <Mail className="w-3 h-3" /> {draft.recipient}
+            </p>
+          )}
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            {formatDistanceToNow(new Date(draft.createdAt), { addSuffix: true })}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <CopyButton text={fullText} />
+          <button
+            onClick={() => { deleteDraft.mutate(draft.id); onDelete(); }}
+            className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+      <ScrollArea className="flex-1">
+        <div className="p-5">
+          <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm leading-relaxed whitespace-pre-wrap">
+            {draft.body}
+          </div>
+          {draft.context && (
+            <div className="mt-4 rounded-xl border border-border/50 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Context</p>
+              <p className="text-xs text-muted-foreground">{draft.context}</p>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
+/* ─── Compose panel ──────────────────────────────────────── */
+function ComposePanel({ onSaved }: { onSaved: (draft: Draft) => void }) {
+  const [mode, setMode] = useState<"compose" | "summarize">("compose");
+  const [tone, setTone] = useState("professional");
   const [recipient, setRecipient] = useState("");
-  const [tone, setTone] = useState<"professional" | "casual" | "formal">("professional");
-  const [generatedDraft, setGeneratedDraft] = useState<{subject: string, body: string} | null>(null);
+  const [context, setContext] = useState("");
+  const [generated, setGenerated] = useState<GeneratedDraft | null>(null);
+  const [editedBody, setEditedBody] = useState("");
+  const [editedSubject, setEditedSubject] = useState("");
+  const [pastedEmail, setPastedEmail] = useState("");
+  const [summary, setSummary] = useState<Summary | null>(null);
 
-  const [emailToSummarize, setEmailToSummarize] = useState("");
-  const [summaryResult, setSummaryResult] = useState<{summary: string; keyPoints: string[]; actionRequired: boolean} | null>(null);
+  const generate = useGenerateDraft();
+  const save = useSaveDraft();
+  const summarize = useSummarize();
 
-  const [draftToSend, setDraftToSend] = useState<number | null>(null);
-
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
-  const [replyDraft, setReplyDraft] = useState<{subject: string; to: string; body: string} | null>(null);
-  const [replyLoading, setReplyLoading] = useState(false);
-  const [sendingReply, setSendingReply] = useState(false);
-  const [replyTone, setReplyTone] = useState<"professional" | "casual" | "formal">("professional");
-  const [replyInstructions, setReplyInstructions] = useState("");
-
-  const { data: drafts, isLoading: draftsLoading } = useListEmailDrafts();
-  const { data: inbox, isLoading: inboxLoading, error: inboxError, refetch: refetchInbox } = useGmailInbox();
-  const { data: selectedMessage, isLoading: messageLoading } = useGmailMessage(selectedMessageId);
-
-  const generateMutation = useGenerateEmailDraft();
-  const createMutation = useCreateEmailDraft();
-  const summarizeMutation = useSummarizeEmail();
-  const deleteMutation = useDeleteEmailDraft();
-
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!context.trim()) return;
-    generateMutation.mutate(
-      { data: { context, recipient, tone } },
-      { onSuccess: (data) => setGeneratedDraft(data) }
+    const result = await generate.mutateAsync({ context, recipient, tone });
+    setGenerated(result);
+    setEditedSubject(result.subject);
+    setEditedBody(result.body);
+  };
+
+  const handleSave = async () => {
+    if (!editedBody || !editedSubject) return;
+    const draft = await save.mutateAsync({ subject: editedSubject, body: editedBody, recipient, context });
+    onSaved(draft);
+    setGenerated(null);
+    setEditedBody("");
+    setEditedSubject("");
+    setContext("");
+    setRecipient("");
+  };
+
+  const handleSummarize = async () => {
+    if (!pastedEmail.trim()) return;
+    const result = await summarize.mutateAsync({ content: pastedEmail });
+    setSummary(result);
+  };
+
+  if (mode === "summarize") {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <h2 className="font-bold text-base">Summarize Email</h2>
+          <button onClick={() => { setMode("compose"); setSummary(null); setPastedEmail(""); }}
+            className="text-xs text-primary font-medium">← Back to Compose</button>
+        </div>
+        <div className="flex-1 flex flex-col gap-4 p-5 overflow-y-auto">
+          {!summary ? (
+            <>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2">Paste email content</label>
+                <textarea
+                  value={pastedEmail}
+                  onChange={e => setPastedEmail(e.target.value)}
+                  placeholder="Paste the email you want to summarize here…"
+                  rows={10}
+                  className="w-full px-3.5 py-3 rounded-2xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                />
+              </div>
+              <button
+                onClick={handleSummarize}
+                disabled={!pastedEmail.trim() || summarize.isPending}
+                className="w-full py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
+              >
+                {summarize.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Analysing…</> : <><Sparkles className="w-4 h-4" /> Summarize</>}
+              </button>
+            </>
+          ) : (
+            <div className="space-y-4">
+              {summary.actionRequired && (
+                <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-500 text-sm font-medium">
+                  <ArrowRight className="w-4 h-4" /> Action required
+                </div>
+              )}
+              <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Summary</p>
+                <p className="text-sm leading-relaxed">{summary.summary}</p>
+              </div>
+              <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Key Points</p>
+                <ul className="space-y-2">
+                  {summary.keyPoints.map((pt, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center mt-0.5 shrink-0">{i + 1}</span>
+                      {pt}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <button
+                onClick={() => { setSummary(null); setPastedEmail(""); }}
+                className="w-full py-2.5 rounded-xl bg-muted hover:bg-muted/80 text-sm font-medium transition-all"
+              >
+                Summarize another
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     );
-  };
+  }
 
-  const handleSaveDraft = () => {
-    if (!generatedDraft) return;
-    createMutation.mutate(
-      { data: { subject: generatedDraft.subject, body: generatedDraft.body, recipient, context } },
-      {
-        onSuccess: () => {
-          setGeneratedDraft(null);
-          setContext("");
-          setRecipient("");
-          queryClient.invalidateQueries({ queryKey: getListEmailDraftsQueryKey() });
-          setActiveTab("drafts");
-          toast({ title: "Draft saved successfully" });
-        }
-      }
-    );
-  };
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <h2 className="font-bold text-base">AI Compose</h2>
+        <button
+          onClick={() => setMode("summarize")}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground font-medium transition-all"
+        >
+          <MailOpen className="w-3.5 h-3.5" /> Summarize email
+        </button>
+      </div>
 
-  const handleSummarize = () => {
-    if (!emailToSummarize.trim()) return;
-    summarizeMutation.mutate(
-      { data: { content: emailToSummarize } },
-      { onSuccess: (data) => setSummaryResult(data) }
-    );
-  };
+      <div className="flex-1 overflow-y-auto">
+        {!generated ? (
+          <div className="p-5 space-y-4">
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2">Tone</label>
+              <div className="flex flex-wrap gap-2">
+                {TONES.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTone(t.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${tone === t.id ? "bg-primary text-primary-foreground border-primary" : "bg-muted/40 text-foreground border-border hover:border-primary/40"}`}
+                  >
+                    {t.emoji} {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-  const handleDelete = (id: number) => {
-    deleteMutation.mutate(
-      { id },
-      { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListEmailDraftsQueryKey() }) }
-    );
-  };
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2">To (optional)</label>
+              <input
+                value={recipient}
+                onChange={e => setRecipient(e.target.value)}
+                placeholder="recipient@example.com"
+                className="w-full h-10 px-3.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
 
-  const handleSend = () => {
-    if (draftToSend) {
-      handleDelete(draftToSend);
-      setDraftToSend(null);
-      toast({ title: "Email sent" });
-    }
-  };
+            <div className="flex-1">
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2">What should this email say?</label>
+              <textarea
+                value={context}
+                onChange={e => setContext(e.target.value)}
+                onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleGenerate(); }}
+                placeholder="Describe the email purpose, key points, any specific requests or context…"
+                rows={6}
+                className="w-full px-3.5 py-3 rounded-2xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1.5">⌘ + Enter to generate</p>
+            </div>
 
-  const handleSendGmailReply = async (autoSend: boolean) => {
-    if (!selectedMessageId) return;
-    if (autoSend) setSendingReply(true);
-    else setReplyLoading(true);
+            <button
+              onClick={handleGenerate}
+              disabled={!context.trim() || generate.isPending}
+              className="w-full py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
+            >
+              {generate.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Writing…</> : <><Sparkles className="w-4 h-4" /> Generate Email</>}
+            </button>
+          </div>
+        ) : (
+          <div className="p-5 space-y-4">
+            <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs font-medium">
+              <Check className="w-3.5 h-3.5" /> Email generated — edit below or save to drafts
+            </div>
 
-    try {
-      const res = await fetch(`${BASE}/api/gmail/reply/${selectedMessageId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tone: replyTone, instructions: replyInstructions, autoSend }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      if (autoSend) {
-        toast({ title: "Reply sent", description: `Replied to: ${selectedMessage?.subject}` });
-        setSelectedMessageId(null);
-        setReplyDraft(null);
-        refetchInbox();
-      } else {
-        setReplyDraft({ subject: data.subject, to: data.to, body: data.body });
-      }
-    } catch (err: unknown) {
-      toast({ title: "Error", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
-    } finally {
-      setSendingReply(false);
-      setReplyLoading(false);
-    }
-  };
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2">Subject line</label>
+              <input
+                value={editedSubject}
+                onChange={e => setEditedSubject(e.target.value)}
+                className="w-full h-10 px-3.5 rounded-xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 font-medium"
+              />
+            </div>
 
-  const handleMarkRead = async (messageId: string) => {
-    try {
-      await fetch(`${BASE}/api/gmail/mark-read/${messageId}`, { method: "POST" });
-      queryClient.invalidateQueries({ queryKey: ["gmail", "inbox"] });
-    } catch {}
-  };
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Body</label>
+                <CopyButton text={`Subject: ${editedSubject}\n\n${editedBody}`} />
+              </div>
+              <textarea
+                value={editedBody}
+                onChange={e => setEditedBody(e.target.value)}
+                rows={12}
+                className="w-full px-3.5 py-3 rounded-2xl border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none leading-relaxed"
+              />
+            </div>
 
-  const handleSendDraftReply = async () => {
-    if (!replyDraft) return;
-    setSendingReply(true);
-    try {
-      const res = await fetch(`${BASE}/api/gmail/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: replyDraft.to, subject: replyDraft.subject, body: replyDraft.body }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      toast({ title: "Reply sent" });
-      setReplyDraft(null);
-      setSelectedMessageId(null);
-      refetchInbox();
-    } catch (err: unknown) {
-      toast({ title: "Error", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
-    } finally {
-      setSendingReply(false);
-    }
-  };
+            <div className="flex gap-2">
+              <button
+                onClick={handleSave}
+                disabled={!editedSubject || !editedBody || save.isPending}
+                className="flex-1 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
+              >
+                {save.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : <><FileText className="w-4 h-4" /> Save to Drafts</>}
+              </button>
+              <button
+                onClick={() => { setGenerated(null); setEditedBody(""); setEditedSubject(""); }}
+                className="px-4 py-3 rounded-xl bg-muted hover:bg-muted/80 text-sm font-medium transition-all"
+              >
+                Regenerate
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-  const gmailConnected = !inboxError || !(inboxError as Error)?.message?.includes("not connected");
+/* ─── Main ───────────────────────────────────────────────── */
+export default function Email() {
+  const { data: drafts = [], isLoading } = useDrafts();
+  const deleteDraft = useDeleteDraft();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+
+  const filtered = drafts.filter(d =>
+    d.subject.toLowerCase().includes(search.toLowerCase()) ||
+    (d.recipient ?? "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const selected = drafts.find(d => d.id === selectedId) ?? null;
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-background">
-      <div className="flex-1 flex flex-col p-8 max-w-6xl mx-auto w-full overflow-hidden">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold tracking-tight">Email Manager</h1>
-          <p className="text-muted-foreground mt-1">Inbox, drafts, compose and summarize with AI.</p>
+      {/* ── Left: draft list ── */}
+      <div className="w-72 shrink-0 border-r border-border flex flex-col">
+        <div className="px-4 pt-6 pb-4 border-b border-border">
+          <h1 className="text-2xl font-bold tracking-tight mb-3">Email</h1>
+          <div className="relative">
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search drafts…"
+              className="w-full h-9 pl-3.5 pr-8 rounded-xl border border-input bg-muted/40 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <TabsList className="grid w-full grid-cols-4 max-w-lg mb-6">
-            <TabsTrigger value="inbox" className="gap-2">
-              <Inbox className="w-3.5 h-3.5" /> Inbox
-            </TabsTrigger>
-            <TabsTrigger value="drafts">Saved Drafts</TabsTrigger>
-            <TabsTrigger value="compose">AI Compose</TabsTrigger>
-            <TabsTrigger value="summarize">Summarize</TabsTrigger>
-          </TabsList>
-
-          {/* INBOX TAB */}
-          <TabsContent value="inbox" className="flex-1 min-h-0 data-[state=active]:flex flex-col m-0 border-0 p-0">
-            {inboxError && (inboxError as Error).message?.includes("not connected") ? (
-              <Card className="flex-1 flex flex-col items-center justify-center border-dashed border-2">
-                <CardContent className="text-center py-16">
-                  <Mail className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                  <h3 className="text-xl font-semibold mb-2">Gmail Not Connected</h3>
-                  <p className="text-muted-foreground max-w-sm">
-                    Connect your Gmail account to check your inbox, read emails, and let AI draft replies for you.
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-4 bg-muted/50 p-3 rounded-lg">
-                    Click the Gmail integration button in your Replit sidebar to connect your account.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="flex gap-4 h-full">
-                {/* Message List */}
-                <Card className="w-80 flex-shrink-0 flex flex-col overflow-hidden">
-                  <CardHeader className="py-3 px-4 border-b flex-row items-center justify-between">
-                    <CardTitle className="text-sm font-semibold">Inbox</CardTitle>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => refetchInbox()}>
-                      <RefreshCw className={`w-3.5 h-3.5 ${inboxLoading ? "animate-spin" : ""}`} />
-                    </Button>
-                  </CardHeader>
-                  <ScrollArea className="flex-1">
-                    {inboxLoading ? (
-                      <div className="p-4 flex flex-col gap-2">
-                        {[...Array(5)].map((_, i) => (
-                          <div key={i} className="h-16 rounded-md bg-muted/40 animate-pulse" />
-                        ))}
-                      </div>
-                    ) : inbox?.messages?.length ? (
-                      <div className="divide-y divide-border">
-                        {inbox.messages.map((msg) => (
-                          <button
-                            key={msg.id}
-                            className={`w-full text-left p-3 hover:bg-muted/50 transition-colors ${selectedMessageId === msg.id ? "bg-primary/10 border-l-2 border-primary" : ""}`}
-                            onClick={() => { setSelectedMessageId(msg.id); setReplyDraft(null); handleMarkRead(msg.id); }}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-1 min-w-0">
-                                {msg.isUnread && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
-                                <span className={`text-xs truncate ${msg.isUnread ? "font-semibold" : "text-muted-foreground"}`}>
-                                  {msg.from.replace(/<.*>/, "").trim() || msg.from}
-                                </span>
-                              </div>
-                            </div>
-                            <p className={`text-sm truncate mt-1 ${msg.isUnread ? "font-medium" : ""}`}>{msg.subject || "(no subject)"}</p>
-                            <p className="text-xs text-muted-foreground truncate mt-0.5">{msg.snippet}</p>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-6 text-center text-muted-foreground text-sm">
-                        <Inbox className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        <p>Inbox is empty</p>
-                      </div>
-                    )}
-                  </ScrollArea>
-                </Card>
-
-                {/* Message Detail + Reply */}
-                <div className="flex-1 flex flex-col gap-4 min-w-0">
-                  {selectedMessageId ? (
-                    <>
-                      <Card className="flex flex-col overflow-hidden flex-1">
-                        {messageLoading ? (
-                          <div className="p-8 text-center text-muted-foreground">
-                            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" /> Loading...
-                          </div>
-                        ) : selectedMessage ? (
-                          <>
-                            <CardHeader className="border-b">
-                              <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <CardTitle className="text-lg">{selectedMessage.subject || "(no subject)"}</CardTitle>
-                                  <p className="text-sm text-muted-foreground mt-1">
-                                    From: <span className="text-foreground">{selectedMessage.from}</span>
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">{selectedMessage.date}</p>
-                                </div>
-                                {selectedMessage.isUnread && (
-                                  <Badge variant="secondary" className="shrink-0">Unread</Badge>
-                                )}
-                              </div>
-                            </CardHeader>
-                            <ScrollArea className="flex-1">
-                              <CardContent className="py-4 whitespace-pre-wrap text-sm leading-relaxed font-mono">
-                                {selectedMessage.body || selectedMessage.snippet}
-                              </CardContent>
-                            </ScrollArea>
-                          </>
-                        ) : null}
-                      </Card>
-
-                      {/* AI Reply Panel */}
-                      <Card className="border-primary/20">
-                        <CardHeader className="py-3 pb-2">
-                          <CardTitle className="text-sm flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-primary" /> AI Reply
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="pb-3 space-y-3">
-                          <div className="flex gap-3">
-                            <div className="flex-1">
-                              <Select value={replyTone} onValueChange={(v) => setReplyTone(v as typeof replyTone)}>
-                                <SelectTrigger className="h-8 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="professional">Professional</SelectItem>
-                                  <SelectItem value="casual">Casual</SelectItem>
-                                  <SelectItem value="formal">Formal</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <Input
-                              placeholder="Additional instructions (optional)"
-                              className="flex-1 h-8 text-xs"
-                              value={replyInstructions}
-                              onChange={(e) => setReplyInstructions(e.target.value)}
-                            />
-                          </div>
-                          {replyDraft ? (
-                            <div className="space-y-2">
-                              <Textarea
-                                value={replyDraft.body}
-                                onChange={(e) => setReplyDraft({ ...replyDraft, body: e.target.value })}
-                                className="min-h-[100px] text-sm resize-none"
-                              />
-                              <div className="flex gap-2">
-                                <Button size="sm" className="gap-2 flex-1" onClick={handleSendDraftReply} disabled={sendingReply}>
-                                  {sendingReply ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                                  Send Reply
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => setReplyDraft(null)}>Discard</Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex gap-2">
-                              <Button size="sm" variant="outline" className="gap-2 flex-1" onClick={() => handleSendGmailReply(false)} disabled={replyLoading}>
-                                {replyLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Reply className="w-3.5 h-3.5" />}
-                                Draft Reply
-                              </Button>
-                              <Button size="sm" className="gap-2 flex-1" onClick={() => handleSendGmailReply(true)} disabled={sendingReply}>
-                                {sendingReply ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                AI Auto-Reply
-                              </Button>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </>
-                  ) : (
-                    <Card className="flex-1 flex items-center justify-center border-dashed">
-                      <div className="text-center text-muted-foreground">
-                        <Mail className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                        <p>Select an email to read and reply</p>
-                      </div>
-                    </Card>
+        <ScrollArea className="flex-1">
+          {isLoading ? (
+            <div className="p-4 space-y-2">
+              {[...Array(4)].map((_, i) => <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center text-muted-foreground">
+              <Mail className="w-8 h-8 mb-3 opacity-20" />
+              <p className="text-sm">{search ? "No drafts match your search" : "No saved drafts yet"}</p>
+              <p className="text-xs mt-1 opacity-70">Use AI Compose to write your first email →</p>
+            </div>
+          ) : (
+            <div className="py-2 px-2 space-y-1">
+              {filtered.map(draft => (
+                <button
+                  key={draft.id}
+                  onClick={() => setSelectedId(draft.id)}
+                  className={`w-full text-left px-3 py-3 rounded-xl transition-all group ${selectedId === draft.id ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/60 border border-transparent"}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-sm truncate leading-tight">{draft.subject}</p>
+                    <ChevronRight className={`w-3.5 h-3.5 shrink-0 mt-0.5 transition-colors ${selectedId === draft.id ? "text-primary" : "text-muted-foreground opacity-0 group-hover:opacity-100"}`} />
+                  </div>
+                  {draft.recipient && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">To: {draft.recipient}</p>
                   )}
-                </div>
-              </div>
-            )}
-          </TabsContent>
-
-          {/* SAVED DRAFTS TAB */}
-          <TabsContent value="drafts" className="flex-1 min-h-0 data-[state=active]:flex flex-col m-0 border-0 p-0">
-            <Card className="flex-1 flex flex-col overflow-hidden border-border bg-card/50">
-              <ScrollArea className="flex-1">
-                {draftsLoading ? (
-                  <div className="p-8 text-center text-muted-foreground">Loading drafts...</div>
-                ) : drafts?.length ? (
-                  <div className="divide-y divide-border">
-                    {drafts.map((draft) => (
-                      <div key={draft.id} className="p-6 group hover:bg-muted/50 transition-colors">
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-semibold text-lg">{draft.subject}</h3>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="opacity-0 group-hover:opacity-100 h-8 text-primary border-primary/20 hover:bg-primary/10"
-                              onClick={() => setDraftToSend(draft.id)}
-                            >
-                              <Send className="w-3.5 h-3.5 mr-2" /> Send
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="opacity-0 group-hover:opacity-100 h-8 w-8 text-muted-foreground hover:text-destructive"
-                              onClick={() => handleDelete(draft.id)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                        {draft.recipient && (
-                          <div className="text-sm text-muted-foreground mb-3 flex items-center gap-1">
-                            <Mail className="w-3 h-3" /> To: {draft.recipient}
-                          </div>
-                        )}
-                        <div className="bg-background/50 p-4 rounded-md text-sm whitespace-pre-wrap border border-border/50">
-                          {draft.body}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-4">
-                          Created {formatDistanceToNow(new Date(draft.createdAt), { addSuffix: true })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-                    <Mail className="w-12 h-12 mb-4 opacity-20" />
-                    <p>No saved drafts.</p>
-                    <Button variant="link" onClick={() => setActiveTab("compose")} className="mt-2 text-primary">
-                      Compose a new email
-                    </Button>
-                  </div>
-                )}
-              </ScrollArea>
-            </Card>
-          </TabsContent>
-
-          {/* AI COMPOSE TAB */}
-          <TabsContent value="compose" className="flex-1 min-h-0 data-[state=active]:flex flex-col m-0 border-0 p-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
-              <Card className="flex flex-col border-primary/20">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-primary" /> Setup Context
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Recipient (Optional)</label>
-                    <Input placeholder="e.g. investors@example.com" value={recipient} onChange={(e) => setRecipient(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Tone</label>
-                    <Select value={tone} onValueChange={(v) => setTone(v as typeof tone)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="professional">Professional</SelectItem>
-                        <SelectItem value="casual">Casual</SelectItem>
-                        <SelectItem value="formal">Formal</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2 flex-1 flex flex-col">
-                    <label className="text-sm font-medium">Context / Instructions</label>
-                    <Textarea
-                      placeholder="What should this email be about? Provide bullet points or rough thoughts..."
-                      className="flex-1 resize-none min-h-[150px]"
-                      value={context}
-                      onChange={(e) => setContext(e.target.value)}
-                    />
-                  </div>
-                </CardContent>
-                <CardFooter className="pt-0">
-                  <Button className="w-full gap-2" onClick={handleGenerate} disabled={!context.trim() || generateMutation.isPending}>
-                    {generateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    Generate Draft
-                  </Button>
-                </CardFooter>
-              </Card>
-
-              <Card className="flex flex-col bg-card/50 overflow-hidden">
-                <CardHeader>
-                  <CardTitle className="text-lg">Generated Draft</CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 p-0">
-                  <ScrollArea className="h-full p-6 pt-0">
-                    {generatedDraft ? (
-                      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <div>
-                          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subject</label>
-                          <Input value={generatedDraft.subject} onChange={(e) => setGeneratedDraft({ ...generatedDraft, subject: e.target.value })} className="mt-1 font-semibold" />
-                        </div>
-                        <div>
-                          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Body</label>
-                          <Textarea value={generatedDraft.body} onChange={(e) => setGeneratedDraft({ ...generatedDraft, body: e.target.value })} className="mt-1 min-h-[300px]" />
-                        </div>
-                        <div className="flex gap-2 pt-2">
-                          <Button className="flex-1 gap-2" onClick={handleSaveDraft} disabled={createMutation.isPending}>
-                            <Plus className="w-4 h-4" /> Save to Drafts
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-muted-foreground opacity-50 flex-col gap-2 pt-20">
-                        <Mail className="w-12 h-12" />
-                        <p>Your generated draft will appear here</p>
-                      </div>
-                    )}
-                  </ScrollArea>
-                </CardContent>
-              </Card>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {formatDistanceToNow(new Date(draft.createdAt), { addSuffix: true })}
+                  </p>
+                </button>
+              ))}
             </div>
-          </TabsContent>
+          )}
+        </ScrollArea>
 
-          {/* SUMMARIZE TAB */}
-          <TabsContent value="summarize" className="flex-1 min-h-0 data-[state=active]:flex flex-col m-0 border-0 p-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full">
-              <Card className="flex flex-col">
-                <CardHeader>
-                  <CardTitle className="text-lg">Input Email</CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col">
-                  <Textarea placeholder="Paste a long email thread here..." className="flex-1 resize-none min-h-[300px]" value={emailToSummarize} onChange={(e) => setEmailToSummarize(e.target.value)} />
-                </CardContent>
-                <CardFooter>
-                  <Button className="w-full gap-2" onClick={handleSummarize} disabled={!emailToSummarize.trim() || summarizeMutation.isPending}>
-                    {summarizeMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    Summarize
-                  </Button>
-                </CardFooter>
-              </Card>
-
-              <Card className="flex flex-col bg-card/50 overflow-hidden">
-                <CardHeader><CardTitle className="text-lg">Summary</CardTitle></CardHeader>
-                <CardContent className="flex-1 p-0">
-                  <ScrollArea className="h-full p-6 pt-0">
-                    {summaryResult ? (
-                      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        {summaryResult.actionRequired && (
-                          <div className="bg-destructive/10 text-destructive border border-destructive/20 p-4 rounded-lg flex items-start gap-3">
-                            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-                            <div>
-                              <h4 className="font-semibold">Action Required</h4>
-                              <p className="text-sm mt-1">This email requires your attention or a response.</p>
-                            </div>
-                          </div>
-                        )}
-                        <div>
-                          <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-2">TL;DR</h4>
-                          <p className="text-lg font-medium leading-relaxed">{summaryResult.summary}</p>
-                        </div>
-                        {summaryResult.keyPoints?.length > 0 && (
-                          <div>
-                            <h4 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider mb-3">Key Points</h4>
-                            <ul className="space-y-2">
-                              {summaryResult.keyPoints.map((point, i) => (
-                                <li key={i} className="flex gap-2 items-start">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
-                                  <span className="leading-relaxed">{point}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-muted-foreground opacity-50 flex-col gap-2 pt-20">
-                        <Search className="w-12 h-12" />
-                        <p>Summary will appear here</p>
-                      </div>
-                    )}
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
+        <div className="p-3 border-t border-border">
+          <p className="text-[11px] text-muted-foreground text-center">
+            {drafts.length} saved draft{drafts.length !== 1 ? "s" : ""}
+          </p>
+        </div>
       </div>
 
-      {/* Send Confirmation Dialog */}
-      <Dialog open={!!draftToSend} onOpenChange={(open) => !open && setDraftToSend(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm Send</DialogTitle>
-            <DialogDescription>Are you sure you want to send this email? This action cannot be undone.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setDraftToSend(null)}>Cancel</Button>
-            <Button onClick={handleSend} className="gap-2">
-              <Send className="w-4 h-4" /> Send Email
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* ── Center: draft detail ── */}
+      <div className="flex-1 border-r border-border overflow-hidden">
+        {selected ? (
+          <DraftDetail draft={selected} onDelete={() => setSelectedId(null)} />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-3">
+            <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center">
+              <Mail className="w-7 h-7 text-red-500" />
+            </div>
+            <div className="text-center">
+              <p className="font-semibold text-foreground text-sm">Select a draft</p>
+              <p className="text-xs mt-1 opacity-70">or compose a new one with AI →</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Right: AI compose & summarize ── */}
+      <div className="w-80 shrink-0 overflow-hidden">
+        <ComposePanel onSaved={(draft) => setSelectedId(draft.id)} />
+      </div>
     </div>
   );
 }
