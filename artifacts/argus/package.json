@@ -74,5 +74,8 @@
     "vite": "catalog:",
     "wouter": "^3.3.5",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "@types/dom-speech-recognition": "^0.0.10"
   }
 }

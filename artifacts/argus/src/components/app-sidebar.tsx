@@ -26,7 +26,8 @@ const NAV_ITEMS = [
 export default function AppSidebar() {
   const [location] = useLocation();
   const { theme, setTheme } = useTheme();
-  const { data: tasks } = useListTasks({}, { refetchInterval: 60_000 });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: tasks } = useListTasks({}, { query: { refetchInterval: 60_000 } as any });
   const { notifications } = useNotifications();
 
   const overdueCount = useMemo(() => {

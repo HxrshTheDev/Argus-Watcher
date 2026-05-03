@@ -68,10 +68,10 @@ function ToastCard({ notif, onDismiss, onSnooze }: {
             <p className="text-[13px] font-bold leading-snug tracking-tight">{notif.title}</p>
             <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">{notif.body}</p>
             {isTask && notif.taskId && (
-              <Link href="/tasks" onClick={handleDismiss}
+              <Link href="/tracker" onClick={handleDismiss}
                 className="inline-flex items-center gap-1 mt-2 text-[11px] text-primary font-bold hover:underline"
               >
-                <Flag className="w-3 h-3" /> View in Tasks
+                <Flag className="w-3 h-3" /> View in Tracker
               </Link>
             )}
             {!isTask && notif.workflowId && (

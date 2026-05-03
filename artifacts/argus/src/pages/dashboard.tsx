@@ -39,7 +39,7 @@ function useDismissBriefing() {
 
 /* ── Activity route mapping ─────────────────────────── */
 const ACTIVITY_CFG: Record<string, { icon: React.ElementType; gradient: string; route: string; label: string }> = {
-  task:     { icon: CheckSquare,   gradient: "from-emerald-500 to-green-600",   route: "/tasks",     label: "Task" },
+  task:     { icon: CheckSquare,   gradient: "from-emerald-500 to-green-600",   route: "/tracker",   label: "Task" },
   chat:     { icon: MessageSquare, gradient: "from-violet-500 to-violet-600",   route: "/chat",      label: "Chat" },
   research: { icon: Search,        gradient: "from-orange-500 to-amber-600",    route: "/research",  label: "Research" },
   email:    { icon: Mail,          gradient: "from-red-500 to-rose-600",        route: "/email",     label: "Email" },
@@ -173,7 +173,7 @@ function BriefingCard() {
 /* ── Quick access (mobile only) ─────────────────────── */
 const MODULES = [
   { url: "/chat",      label: "Chat",      icon: MessageSquare, gradient: "from-violet-500 to-violet-600" },
-  { url: "/tasks",     label: "Tasks",     icon: CheckSquare,   gradient: "from-emerald-500 to-green-600" },
+  { url: "/tracker",   label: "Tracker",   icon: CheckSquare,   gradient: "from-emerald-500 to-green-600" },
   { url: "/research",  label: "Research",  icon: Search,        gradient: "from-orange-500 to-amber-600" },
   { url: "/email",     label: "Email",     icon: Mail,          gradient: "from-red-500 to-rose-600" },
   { url: "/posts",     label: "Posts",     icon: Share2,        gradient: "from-pink-500 to-rose-500" },
@@ -276,7 +276,7 @@ export default function Dashboard() {
           ) : stats ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCard label="Tasks" value={stats.tasks?.pending ?? 0} icon={CheckSquare}
-                gradient="from-emerald-500 to-green-600" href="/tasks"
+                gradient="from-emerald-500 to-green-600" href="/tracker"
                 alert={(stats.tasks?.overdue ?? 0) > 0}
                 sub={(stats.tasks?.overdue ?? 0) > 0 ? `${stats.tasks.overdue} overdue` : `${stats.tasks?.completed ?? 0} done`}
               />

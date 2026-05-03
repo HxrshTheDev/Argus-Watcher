@@ -36,7 +36,8 @@ const NAV = [
 
 function MobileBottomNav() {
   const [location] = useLocation();
-  const { data: tasks } = useListTasks({}, { refetchInterval: 60_000 });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: tasks } = useListTasks({}, { query: { refetchInterval: 60_000 } as any });
 
   const overdueCount = useMemo(() => {
     if (!tasks) return 0;
@@ -59,7 +60,7 @@ function MobileBottomNav() {
         {NAV.map((item) => {
           const active = isCurrent(item.url);
           const Icon = item.icon;
-          const showBadge = item.url === "/tasks" && overdueCount > 0;
+          const showBadge = item.url === "/tracker" && overdueCount > 0;
 
           return (
             <Link key={item.url} href={item.url}
