@@ -1,381 +1,381 @@
-# PRODUCT REQUIREMENTS DOCUMENT (PRD)
+# PRODUCT REQUIREMENTS DOCUMENT (PRD) 
 
-## Product Name
+## Product Name 
 
-Argus – Personal AI Assistant
+Argus – Personal AI Assistant 
 
----
+--- 
 
-## 1. Vision
+## 1. Vision 
 
-Argus is a modular AI assistant that helps users manage daily tasks, perform research, draft emails, and create social media content. It combines an intelligent AI “brain” with a simple workflow automation system inspired by n8n.
+Argus is a modular AI assistant that helps users manage daily tasks, perform research, draft emails, and create social media content. It combines an intelligent AI “brain” with a simple workflow automation system inspired by n8n. 
 
-The system must be practical, safe, and extensible. Version 1 should prioritize reliability over complexity.
+The system must be practical, safe, and extensible. Version 1 should prioritize reliability over complexity. 
 
----
+--- 
 
-## 2. Core Principles
+## 2. Core Principles 
 
-* Simplicity over feature overload
-* Human-in-the-loop for all external actions
-* Modular architecture (tools + workflows)
-* Transparency in AI actions
-* Extensibility for future automation
+* Simplicity over feature overload 
+* Human-in-the-loop for all external actions 
+* Modular architecture (tools + workflows) 
+* Transparency in AI actions 
+* Extensibility for future automation 
 
----
+--- 
 
-## 3. Target Features (V1 Scope)
+## 3. Target Features (V1 Scope) 
 
-### 3.1 Chat Assistant (Core)
+### 3.1 Chat Assistant (Core) 
 
-* Conversational interface
-* Understand user intent
-* Decide between:
+* Conversational interface 
+* Understand user intent 
+* Decide between: 
 
-  * direct response
-  * tool usage
-* Maintain minimal session context
+  * direct response 
+  * tool usage 
+* Maintain minimal session context 
 
----
+--- 
 
-### 3.2 Email Assistant
+### 3.2 Email Assistant 
 
-Capabilities:
+Capabilities: 
 
-* Fetch recent emails
-* Summarize emails
-* Draft replies
-* Send emails ONLY after explicit confirmation
+* Fetch recent emails 
+* Summarize emails 
+* Draft replies 
+* Send emails ONLY after explicit confirmation 
 
-UI:
+UI: 
 
-* Inbox preview (sender, subject, snippet)
-* “Summarize” button
-* “Draft reply” button
-* “Confirm & Send” step
+* Inbox preview (sender, subject, snippet) 
+* “Summarize” button 
+* “Draft reply” button 
+* “Confirm & Send” step 
 
----
+--- 
 
-### 3.3 Research Assistant
+### 3.3 Research Assistant 
 
-Capabilities:
+Capabilities: 
 
-* Answer queries with structured summaries
-* Break topics into key insights
-* Compare options
-* Save notes
+* Answer queries with structured summaries 
+* Break topics into key insights 
+* Compare options 
+* Save notes 
 
-UI:
+UI: 
 
-* Research input box
-* Results panel with:
+* Research input box 
+* Results panel with: 
 
-  * summary
-  * bullet insights
-  * conclusion
-* Save to “Research Notes”
+  * summary 
+  * bullet insights 
+  * conclusion 
+* Save to “Research Notes” 
 
----
+--- 
 
-### 3.4 Task Manager
+### 3.4 Task Manager 
 
-Capabilities:
+Capabilities: 
 
-* Create task
-* Edit task
-* Mark complete
-* Set due date
-* Set priority
+* Create task 
+* Edit task 
+* Mark complete 
+* Set due date 
+* Set priority 
 
-UI:
+UI: 
 
-* Clean list view
-* Filters (today, upcoming, completed)
-* Quick add input
+* Clean list view 
+* Filters (today, upcoming, completed) 
+* Quick add input 
 
----
+--- 
 
-### 3.5 Social Media Post Creator (NOT automation)
+### 3.5 Social Media Post Creator (NOT automation) 
 
-Capabilities:
+Capabilities: 
 
-* Generate:
+* Generate: 
 
-  * captions
-  * hooks
-  * hashtags
-  * short/long posts
-* Tone selection:
+  * captions 
+  * hooks 
+  * hashtags 
+  * short/long posts 
+* Tone selection: 
 
-  * professional
-  * casual
-  * promotional
+  * professional 
+  * casual 
+  * promotional 
 
-UI:
+UI: 
 
-* Input topic box
-* Tone selector
-* Output editor
-* Copy + Save
+* Input topic box 
+* Tone selector 
+* Output editor 
+* Copy + Save 
 
----
+--- 
 
-### 3.6 Workflow Engine (n8n-inspired, simplified)
+### 3.6 Workflow Engine (n8n-inspired, simplified) 
 
-Structure:
+Structure: 
 
-* JSON-based workflows
+* JSON-based workflows 
 
-Each workflow contains:
+Each workflow contains: 
 
-* Trigger
-* Action(s)
-* Optional condition
-* Output
+* Trigger 
+* Action(s) 
+* Optional condition 
+* Output 
 
-Example:
+Example: 
 
-* Email received → summarize → draft reply
+* Email received → summarize → draft reply 
 
-Execution:
+Execution: 
 
-* Sequential node execution
-* No complex branching in V1
+* Sequential node execution 
+* No complex branching in V1 
 
-UI:
+UI: 
 
-* Basic visual blocks OR list-based builder
-* Save + Run workflow
+* Basic visual blocks OR list-based builder 
+* Save + Run workflow 
 
----
+--- 
 
-## 4. System Architecture
+## 4. System Architecture 
 
-### 4.1 Backend
+### 4.1 Backend 
 
-* Python FastAPI
+* Python FastAPI 
 
-Modules:
+Modules: 
 
-* routes/
-* services/
-* models/
-* tools/
-* workflows/
+* routes/ 
+* services/ 
+* models/ 
+* tools/ 
+* workflows/ 
 
----
+--- 
 
-### 4.2 AI Integration
+### 4.2 AI Integration 
 
-* Use OpenAI-compatible API
-* Configure via environment variables
+* Use OpenAI-compatible API 
+* Configure via environment variables 
 
-Environment Variables:
+Environment Variables: 
 
-* LLM_API_KEY (NVIDIA Nemotron key)
-* LLM_BASE_URL (Nemotron endpoint)
-* MODEL_NAME
+* LLM_API_KEY (NVIDIA Nemotron key) 
+* LLM_BASE_URL (Nemotron endpoint) 
+* MODEL_NAME 
 
-AI Responsibilities:
+AI Responsibilities: 
 
-* Intent detection
-* Tool selection
-* Content generation
+* Intent detection 
+* Tool selection 
+* Content generation 
 
----
+--- 
 
-### 4.3 Database
+### 4.3 Database 
 
-* SQLite
+* SQLite 
 
-Tables:
+Tables: 
 
-* users
-* tasks
-* research_notes
-* emails_cache
-* workflows
-* social_posts
+* users 
+* tasks 
+* research_notes 
+* emails_cache 
+* workflows 
+* social_posts 
 
----
+--- 
 
-### 4.4 Tool System
+### 4.4 Tool System 
 
-Each tool = independent function
+Each tool = independent function 
 
-Examples:
+Examples: 
 
-* summarize_text
-* create_task
-* fetch_emails
-* draft_email
-* generate_post
+* summarize_text 
+* create_task 
+* fetch_emails 
+* draft_email 
+* generate_post 
 
-AI decides when to call tools.
+AI decides when to call tools. 
 
----
+--- 
 
-### 4.5 Workflow Engine
+### 4.5 Workflow Engine 
 
-* Reads workflow JSON
-* Executes step-by-step
-* Passes output between nodes
+* Reads workflow JSON 
+* Executes step-by-step 
+* Passes output between nodes 
 
----
+--- 
 
-## 5. UI / UX DESIGN
+## 5. UI / UX DESIGN 
 
-### 5.1 Design Style
+### 5.1 Design Style 
 
-* Minimal, modern, clean
-* Dark + light mode
-* Soft shadows, rounded corners
-* Neutral palette with one accent color
+* Minimal, modern, clean 
+* Dark + light mode 
+* Soft shadows, rounded corners 
+* Neutral palette with one accent color 
 
-Colors:
+Colors: 
 
-* Background: #0f172a (dark)
-* Card: #1e293b
-* Accent: #6366f1 (indigo)
-* Text: #e2e8f0
+* Background: #0f172a (dark) 
+* Card: #1e293b 
+* Accent: #6366f1 (indigo) 
+* Text: #e2e8f0 
 
-Typography:
+Typography: 
 
-* Clean sans-serif
-* Medium weight headings
-* Comfortable spacing
+* Clean sans-serif 
+* Medium weight headings 
+* Comfortable spacing 
 
----
+--- 
 
-### 5.2 Layout
+### 5.2 Layout 
 
-Main Dashboard Layout:
+Main Dashboard Layout: 
 
-* Left Sidebar:
+* Left Sidebar: 
 
-  * Chat
-  * Tasks
-  * Email
-  * Research
-  * Posts
-  * Workflows
+  * Chat 
+  * Tasks 
+  * Email 
+  * Research 
+  * Posts 
+  * Workflows 
 
-* Main Panel:
+* Main Panel: 
 
-  * Dynamic based on selection
+  * Dynamic based on selection 
 
----
+--- 
 
-### 5.3 Key UX Behaviors
+### 5.3 Key UX Behaviors 
 
-Chat:
+Chat: 
 
-* Sticky input at bottom
-* Streaming responses (if possible)
+* Sticky input at bottom 
+* Streaming responses (if possible) 
 
-Tasks:
+Tasks: 
 
-* Checkbox interaction
-* Inline editing
+* Checkbox interaction 
+* Inline editing 
 
-Email:
+Email: 
 
-* Click to expand
-* Action buttons visible
+* Click to expand 
+* Action buttons visible 
 
-Research:
+Research: 
 
-* Structured output
-* Save option
+* Structured output 
+* Save option 
 
-Workflows:
+Workflows: 
 
-* Simple builder
-* Clear execution feedback
+* Simple builder 
+* Clear execution feedback 
 
----
+--- 
 
-### 5.4 UX Rules
+### 5.4 UX Rules 
 
-* Never overload screen
-* Always show system status
-* Confirm before critical actions
-* Keep flows predictable
+* Never overload screen 
+* Always show system status 
+* Confirm before critical actions 
+* Keep flows predictable 
 
----
+--- 
 
-## 6. Safety & Guardrails
+## 6. Safety & Guardrails 
 
-* Confirm before:
+* Confirm before: 
 
-  * sending emails
-  * deleting tasks
-* Show preview before action
-* Log all actions
-* No hidden automation
+  * sending emails 
+  * deleting tasks 
+* Show preview before action 
+* Log all actions 
+* No hidden automation 
 
----
+--- 
 
-## 7. Development Phases
+## 7. Development Phases 
 
-### Phase 1 (Foundation)
+### Phase 1 (Foundation) 
 
-* FastAPI setup
-* LLM integration
-* Chat working
+* FastAPI setup 
+* LLM integration 
+* Chat working 
 
-### Phase 2
+### Phase 2 
 
-* Task manager
-* Research module
+* Task manager 
+* Research module 
 
-### Phase 3
+### Phase 3 
 
-* Email summarization + draft
+* Email summarization + draft 
 
-### Phase 4
+### Phase 4 
 
-* Social post generator
-* Workflow engine
+* Social post generator 
+* Workflow engine 
 
-### Phase 5
+### Phase 5 
 
-* UI polish
-* Logging
-* Error handling
+* UI polish 
+* Logging 
+* Error handling 
 
----
+--- 
 
-## 8. Acceptance Criteria
+## 8. Acceptance Criteria 
 
-* Chat works with AI
-* Tasks can be created and managed
-* Research queries produce structured answers
-* Emails can be summarized and drafted
-* Social posts can be generated (no auto posting)
-* Workflows execute step-by-step
-* App runs without major errors
+* Chat works with AI 
+* Tasks can be created and managed 
+* Research queries produce structured answers 
+* Emails can be summarized and drafted 
+* Social posts can be generated (no auto posting) 
+* Workflows execute step-by-step 
+* App runs without major errors 
 
----
+--- 
 
-## 9. Non-Goals (Important)
+## 9. Non-Goals (Important) 
 
-* No WhatsApp automation
-* No call automation
-* No social media auto-posting
-* No complex workflow branching in V1
+* No WhatsApp automation 
+* No call automation 
+* No social media auto-posting 
+* No complex workflow branching in V1 
 
----
+--- 
 
-## 10. Setup Requirements
+## 10. Setup Requirements 
 
-* .env file required
-* Install dependencies
-* Run backend + frontend
-* Clear README instructions
+* .env file required 
+* Install dependencies 
+* Run backend + frontend 
+* Clear README instructions 
 
----
+--- 
 
-## FINAL INSTRUCTION TO REPLIT AGENT
+## FINAL INSTRUCTION TO REPLIT AGENT 
 
-Start by scaffolding the entire project structure. Then implement Phase 1 completely before moving to the next phases. Do not skip steps. Keep the code modular and clean.
+Start by scaffolding the entire project structure. Then implement Phase 1 completely before moving to the next phases. Do not skip steps. Keep the code modular and clean. 
